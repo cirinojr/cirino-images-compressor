@@ -1,0 +1,66 @@
+.cic-wrap {
+  max-width: 920px;
+}
+
+.cic-title {
+  margin: 16px 0 8px;
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+.cic-description {
+  margin: 0 0 20px;
+}
+
+.cic-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.cic-btn {
+  border: 1px solid;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.cic-btn:hover {
+  opacity: 0.92;
+}
+
+.cic-btn-primary {
+  font-weight: 700;
+}
+
+.cic-btn-secondary {
+  font-weight: 500;
+}
+
+.cic-status-grid {
+  border: 1px solid;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cic-status-row {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid;
+}
+
+.cic-status-row:last-child {
+  border-bottom: none;
+}
+
+.cic-label {
+  font-weight: 600;
+}
+
+.cic-value {
+  word-break: break-word;
+}
