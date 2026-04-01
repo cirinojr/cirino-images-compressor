@@ -12,6 +12,41 @@
   margin: 0 0 20px;
 }
 
+.cic-toast {
+  display: block;
+  margin: 0;
+  padding: 0 12px;
+  border: 0 solid;
+  border-radius: 6px;
+  font-weight: 600;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease, max-height 160ms ease, margin 160ms ease, padding 160ms ease, border-width 160ms ease;
+}
+
+.cic-toast.is-visible {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-width: 1px;
+  opacity: 1;
+  max-height: 80px;
+  transform: translateY(0);
+}
+
+.cic-toast.is-success {
+  background: #f0f9f0;
+  border-color: #2f7d32;
+  color: #1f5a22;
+}
+
+.cic-toast.is-error {
+  background: #fdf2f2;
+  border-color: #b42318;
+  color: #7a271a;
+}
+
 .cic-actions {
   display: flex;
   gap: 10px;

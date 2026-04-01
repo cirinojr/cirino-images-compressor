@@ -7,6 +7,7 @@ if (!defined('ABSPATH')) {
 final class CICPlugin {
     public const CRON_HOOK = 'cic_process_batch_event';
     public const CRON_RECURRENCE = 'cic_every_five_minutes';
+    private const MIME_WEBP = 'image/webp';
 
     /**
      * Plugin singleton instance.
@@ -49,6 +50,7 @@ final class CICPlugin {
         add_action('plugins_loaded', array($this, 'loadTextdomain'));
         add_filter('cron_schedules', array($this, 'registerCronSchedules'));
         add_action(self::CRON_HOOK, array($this, 'processCronBatch'));
+        add_filter('image_editor_output_format', array($this, 'forceWebpAsDefaultOutputFormat'));
         add_filter('wp_generate_attachment_metadata', array($this, 'autoConvertUploadedImage'), 20, 2);
 
         if (is_admin()) {
@@ -98,5 +100,28 @@ final class CICPlugin {
         $this->converter->processAttachment((int) $attachmentId, $metadata);
 
         return $metadata;
+    }
+
+    public function forceWebpAsDefaultOutputFormat($formats) {
+        if (!$this->converter->isForceWebpOutputEnabled()) {
+            return $formats;
+        }
+
+        if (!wp_image_editor_supports(array('mime_type' => self::MIME_WEBP))) {
+            return $formats;
+        }
+
+        if (!is_array($formats)) {
+            $formats = array();
+        }
+
+        $formats['image/jpeg'] = self::MIME_WEBP;
+        $formats['image/png'] = self::MIME_WEBP;
+        $formats['image/gif'] = self::MIME_WEBP;
+        $formats['image/heic'] = self::MIME_WEBP;
+        $formats['image/heif'] = self::MIME_WEBP;
+        $formats[self::MIME_WEBP] = self::MIME_WEBP;
+
+        return $formats;
     }
 }

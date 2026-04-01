@@ -19,8 +19,11 @@ final class CICLifecycle {
         add_filter('cron_schedules', array('CICLifecycle', 'registerCronSchedules'));
         update_option(self::OPTION_VERSION, CIC_VERSION);
         add_option(CICConverter::OPTION_KEEP_ORIGINAL, CICConverter::DEFAULT_KEEP_ORIGINAL);
+        add_option(CICConverter::OPTION_FORCE_WEBP_OUTPUT, CICConverter::DEFAULT_FORCE_WEBP_OUTPUT);
+        add_option(CICConverter::OPTION_BATCH_SIZE, CICConverter::DEFAULT_BATCH_SIZE);
         add_option(CICConverter::OPTION_WEBP_QUALITY, CICConverter::DEFAULT_WEBP_QUALITY);
         add_option(CICConverter::OPTION_WEBP_COMPRESSION_TYPE, CICConverter::DEFAULT_WEBP_COMPRESSION_TYPE);
+        add_option(CICConverter::OPTION_PERFORMANCE_STATS, array());
 
         if (!wp_next_scheduled(CICPlugin::CRON_HOOK)) {
             wp_schedule_event(time() + MINUTE_IN_SECONDS, CICPlugin::CRON_RECURRENCE, CICPlugin::CRON_HOOK);
@@ -34,6 +37,9 @@ final class CICLifecycle {
      */
     public static function deactivate() {
         wp_clear_scheduled_hook(CICPlugin::CRON_HOOK);
+        delete_option(CICConverter::OPTION_RUNNING);
+        delete_option(CICConverter::OPTION_BATCH_LOCK);
+        delete_option(CICConverter::OPTION_PERFORMANCE_STATS);
     }
 
     /**
@@ -49,8 +55,11 @@ final class CICLifecycle {
             CICConverter::OPTION_RUNNING,
             CICConverter::OPTION_BATCH_SIZE,
             CICConverter::OPTION_KEEP_ORIGINAL,
+            CICConverter::OPTION_FORCE_WEBP_OUTPUT,
             CICConverter::OPTION_WEBP_QUALITY,
             CICConverter::OPTION_WEBP_COMPRESSION_TYPE,
+            CICConverter::OPTION_BATCH_LOCK,
+            CICConverter::OPTION_PERFORMANCE_STATS,
         );
 
         foreach ($optionNames as $optionName) {

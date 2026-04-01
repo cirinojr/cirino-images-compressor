@@ -6,6 +6,10 @@ if (!defined('ABSPATH')) {
 
 final class CICFileConversionService {
     private const MIME_WEBP = 'image/webp';
+    /**
+     * @var string|null
+     */
+    private static $uploadsBaseDirCache = null;
 
     public function convertOriginalFile($filePath, $compressionType, $quality, &$failureReason) {
         $isAlreadyWebp = 'webp' === strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
@@ -116,6 +120,10 @@ final class CICFileConversionService {
     }
 
     private function getThumbnailFilePaths($attachmentId, $originalFilePath, $attachmentMetadata) {
+        if (!is_string($originalFilePath) || '' === $originalFilePath) {
+            return array();
+        }
+
         $metadata = is_array($attachmentMetadata) ? $attachmentMetadata : wp_get_attachment_metadata($attachmentId);
         if (!is_array($metadata) || empty($metadata['sizes']) || !is_array($metadata['sizes'])) {
             return array();
@@ -149,6 +157,10 @@ final class CICFileConversionService {
         $isSuccessful = false;
         $effectiveQuality = $this->getEffectiveWebpQuality($quality, $compressionType);
         $webpPath = $this->replacePathExtensionToWebp($filePath);
+
+        if ($this->hasReusableWebpFile($filePath, $webpPath)) {
+            return true;
+        }
 
         if ($this->validateWebpPaths($filePath, $webpPath, $failureReason)) {
             $editorResult = $this->saveAsWebpWithEditor($filePath, $webpPath, $effectiveQuality, $failureReason);
@@ -268,18 +280,26 @@ final class CICFileConversionService {
     }
 
     private function getResolvedUploadsBaseDir() {
+        if (null !== self::$uploadsBaseDirCache) {
+            return self::$uploadsBaseDirCache;
+        }
+
         $uploads = wp_upload_dir();
         $uploadsBaseDir = isset($uploads['basedir']) ? (string) $uploads['basedir'] : '';
         if ('' === $uploadsBaseDir) {
-            return '';
+            self::$uploadsBaseDirCache = '';
+            return self::$uploadsBaseDirCache;
         }
 
         $resolvedBaseDir = realpath($uploadsBaseDir);
         if (false === $resolvedBaseDir) {
-            return '';
+            self::$uploadsBaseDirCache = '';
+            return self::$uploadsBaseDirCache;
         }
 
-        return wp_normalize_path(trailingslashit($resolvedBaseDir));
+        self::$uploadsBaseDirCache = wp_normalize_path(trailingslashit($resolvedBaseDir));
+
+        return self::$uploadsBaseDirCache;
     }
 
     private function resolvePathForUploadsValidation($path, $allowNotExistingFile) {
@@ -303,5 +323,24 @@ final class CICFileConversionService {
         }
 
         return $resolvedNormalizedPath;
+    }
+
+    private function hasReusableWebpFile($sourcePath, $webpPath) {
+        if ('' === $webpPath || !file_exists($webpPath)) {
+            return false;
+        }
+
+        if (filesize($webpPath) <= 0) {
+            return false;
+        }
+
+        $sourceModifiedAt = @filemtime($sourcePath);
+        $webpModifiedAt = @filemtime($webpPath);
+
+        if (false === $sourceModifiedAt || false === $webpModifiedAt) {
+            return false;
+        }
+
+        return $webpModifiedAt >= $sourceModifiedAt;
     }
 }
