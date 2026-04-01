@@ -10,6 +10,11 @@
   }
 
   const byId = (id) => document.getElementById(id);
+  const wrap = document.querySelector('.cic-wrap');
+  const processingPill = byId('cic-processing-pill');
+  const lastSync = byId('cic-last-sync');
+  const tabButtons = Array.from(document.querySelectorAll('.cic-tab[data-tab-target]'));
+  const tabPanels = Array.from(document.querySelectorAll('.cic-panel[data-tab-panel]'));
   const toast = byId('cic-toast');
   let statusRequestInFlight = false;
   let actionRequestInFlight = false;
@@ -46,6 +51,20 @@
     });
   };
 
+  const activateTab = (target) => {
+    tabButtons.forEach((button) => {
+      const active = button.dataset.tabTarget === target;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    tabPanels.forEach((panel) => {
+      const active = panel.dataset.tabPanel === target;
+      panel.classList.toggle('is-active', active);
+      panel.hidden = !active;
+    });
+  };
+
   const formatPercent = (value) => {
     const number = Number(value || 0);
     return `${number.toFixed(2)}%`;
@@ -77,17 +96,39 @@
     applyRecommendedButton.disabled = disabled;
   };
 
+  const setButtonLoading = (button, loading) => {
+    if (!button) {
+      return;
+    }
+
+    button.classList.toggle('is-loading', !!loading);
+  };
+
   const renderStatus = (payload) => {
     if (!payload) {
       return;
     }
 
     byId('cic-status-running').textContent = payload.running ? t('running', 'Running') : t('stopped', 'Stopped');
+    if (processingPill) {
+      processingPill.textContent = payload.running ? t('running', 'Running') : t('stopped', 'Stopped');
+      processingPill.classList.toggle('is-running', !!payload.running);
+    }
+
+    if (wrap) {
+      wrap.classList.toggle('is-processing', !!payload.running);
+    }
+
+    if (lastSync) {
+      const now = new Date();
+      lastSync.textContent = `${t('updatedAt', 'updated at')}: ${now.toLocaleTimeString()}`;
+    }
+
     byId('cic-status-webp-support').textContent = payload.webp_supported ? t('available', 'Available') : t('unavailable', 'Unavailable');
 
     const capabilities = payload.capabilities || {};
     const binaries = capabilities.binaries || {};
-    const summary = [
+    const capabilitySummary = [
       binaries.pngquant ? 'pngquant' : null,
       binaries.oxipng ? 'oxipng' : null,
       binaries.cwebp ? 'cwebp' : null,
@@ -95,7 +136,7 @@
       capabilities?.imagick?.available ? 'imagick' : null,
       capabilities?.gd?.available ? 'gd' : null
     ].filter(Boolean);
-    byId('cic-status-capabilities').textContent = summary.length ? summary.join(', ') : '-';
+    byId('cic-status-capabilities').textContent = capabilitySummary.length ? capabilitySummary.join(', ') : '-';
 
     byId('cic-status-month').textContent =
       `${formatPercent(payload.month.percentage)} (${payload.month.converted} / ${payload.month.total})`;
@@ -176,6 +217,9 @@
 
     actionRequestInFlight = true;
     setActionButtonsDisabled(true);
+    if (options.button) {
+      setButtonLoading(options.button, true);
+    }
 
     request(action).then((response) => {
       if (response?.success) {
@@ -195,6 +239,9 @@
       }
     }).finally(() => {
       actionRequestInFlight = false;
+      if (options.button) {
+        setButtonLoading(options.button, false);
+      }
 
       if (!applyRecommendedRestoreTimer) {
         setActionButtonsDisabled(false);
@@ -207,22 +254,24 @@
 
   startButton.addEventListener('click', () => {
     runAction('cic_start_conversion', {
+      button: startButton,
       onSuccess: () => {
-        showToast(t('startSuccess', 'Conversion started successfully.'), 'success');
+        showToast(t('startSuccess', 'Optimization started successfully.'), 'success');
       },
       onError: () => {
-        showToast(t('startError', 'Could not start conversion.'), 'error');
+        showToast(t('startError', 'Could not start optimization.'), 'error');
       }
     });
   });
 
   stopButton.addEventListener('click', () => {
     runAction('cic_stop_conversion', {
+      button: stopButton,
       onSuccess: () => {
-        showToast(t('stopSuccess', 'Conversion stopped.'), 'success');
+        showToast(t('stopSuccess', 'Optimization stopped.'), 'success');
       },
       onError: () => {
-        showToast(t('stopError', 'Could not stop conversion.'), 'error');
+        showToast(t('stopError', 'Could not stop optimization.'), 'error');
       }
     });
   });
@@ -233,8 +282,10 @@
     }
 
     setApplyRecommendedButtonState(t('applying', 'Applying...'), true);
+    setButtonLoading(applyRecommendedButton, true);
 
     runAction('cic_apply_recommended_batch', {
+      button: applyRecommendedButton,
       onSuccess: (data) => {
         const responseData = data || {};
         const appliedBatch = Number(responseData.batch_size_applied || 0);
@@ -254,6 +305,14 @@
     });
   });
 
+  tabButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tabTarget || 'config';
+      activateTab(target);
+    });
+  });
+
+  activateTab('config');
   refreshStatus();
   globalThis.setInterval(refreshStatus, Number(cicAdminConfig.pollInterval || 10000));
 })();
