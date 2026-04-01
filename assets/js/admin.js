@@ -10,7 +10,8 @@
   }
 
   const byId = (id) => document.getElementById(id);
-  const wrap = document.querySelector('.cic-wrap');
+  const logo = byId('cic-brand-logo');
+  const brandMark = document.querySelector('.cic-brand-mark');
   const processingPill = byId('cic-processing-pill');
   const lastSync = byId('cic-last-sync');
   const tabButtons = Array.from(document.querySelectorAll('.cic-tab[data-tab-target]'));
@@ -49,6 +50,12 @@
 
       return response.json();
     });
+  };
+
+  const enableLogoFallback = () => {
+    if (brandMark) {
+      brandMark.classList.add('is-fallback');
+    }
   };
 
   const activateTab = (target) => {
@@ -113,10 +120,6 @@
     if (processingPill) {
       processingPill.textContent = payload.running ? t('running', 'Running') : t('stopped', 'Stopped');
       processingPill.classList.toggle('is-running', !!payload.running);
-    }
-
-    if (wrap) {
-      wrap.classList.toggle('is-processing', !!payload.running);
     }
 
     if (lastSync) {
@@ -311,6 +314,16 @@
       activateTab(target);
     });
   });
+
+  if (logo) {
+    if (logo.complete && (!logo.naturalWidth || logo.naturalWidth === 0)) {
+      enableLogoFallback();
+    } else {
+      logo.addEventListener('error', enableLogoFallback);
+    }
+  } else {
+    enableLogoFallback();
+  }
 
   activateTab('config');
   refreshStatus();
