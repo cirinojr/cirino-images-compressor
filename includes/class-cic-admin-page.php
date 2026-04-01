@@ -44,20 +44,8 @@ final class CICAdminPage {
             return;
         }
 
-        wp_enqueue_style(
-            'cic-admin-style',
-            CIC_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            CIC_VERSION
-        );
-
-        wp_enqueue_script(
-            'cic-admin-script',
-            CIC_PLUGIN_URL . 'assets/js/admin.js',
-            array(),
-            CIC_VERSION,
-            true
-        );
+        wp_enqueue_style('cic-admin-style', CIC_PLUGIN_URL . 'assets/css/admin.css', array(), CIC_VERSION);
+        wp_enqueue_script('cic-admin-script', CIC_PLUGIN_URL . 'assets/js/admin.js', array(), CIC_VERSION, true);
 
         wp_localize_script(
             'cic-admin-script',
@@ -87,10 +75,10 @@ final class CICAdminPage {
                     'applied' => __('Applied', 'cirino-images-compressor'),
                     'applyFailed' => __('Apply failed', 'cirino-images-compressor'),
                     'appliedWithValue' => __('Applied: %d', 'cirino-images-compressor'),
-                    'startSuccess' => __('Conversion started successfully.', 'cirino-images-compressor'),
-                    'startError' => __('Could not start conversion.', 'cirino-images-compressor'),
-                    'stopSuccess' => __('Conversion stopped.', 'cirino-images-compressor'),
-                    'stopError' => __('Could not stop conversion.', 'cirino-images-compressor'),
+                    'startSuccess' => __('Optimization started successfully.', 'cirino-images-compressor'),
+                    'startError' => __('Could not start optimization.', 'cirino-images-compressor'),
+                    'stopSuccess' => __('Optimization stopped.', 'cirino-images-compressor'),
+                    'stopError' => __('Could not stop optimization.', 'cirino-images-compressor'),
                     'applySuccessWithValue' => __('Recommended batch applied: %d.', 'cirino-images-compressor'),
                     'applySuccess' => __('Recommended batch applied.', 'cirino-images-compressor'),
                     'applyError' => __('Could not apply recommended batch.', 'cirino-images-compressor'),
@@ -105,16 +93,12 @@ final class CICAdminPage {
         }
 
         $settings = $this->converter->getSettings();
-        $settingsSaved = false;
-
-        if (isset($_GET['cic_settings'])) {
-            $settingsSaved = '1' === sanitize_text_field(wp_unslash($_GET['cic_settings']));
-        }
+        $settingsSaved = isset($_GET['cic_settings']) && '1' === sanitize_text_field(wp_unslash($_GET['cic_settings']));
 
         ?>
         <div class="wrap cic-wrap">
             <h1 class="cic-title"><?php echo esc_html__('Cirino Images Compressor', 'cirino-images-compressor'); ?></h1>
-            <p class="cic-description"><?php echo esc_html__('Bulk conversion to WebP runs through WordPress cron and progresses from this screen as well. Only image attachments are processed.', 'cirino-images-compressor'); ?></p>
+            <p class="cic-description"><?php echo esc_html__('Aggressive image optimization with safe fallback chain (Binary > Imagick > GD) and optional WebP/AVIF generation.', 'cirino-images-compressor'); ?></p>
 
             <?php if ($settingsSaved) : ?>
                 <div class="notice notice-success is-dismissible">
@@ -137,86 +121,82 @@ final class CICAdminPage {
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><?php echo esc_html__('Keep original image', 'cirino-images-compressor'); ?></th>
+                        <th scope="row"><?php echo esc_html__('Optimization level', 'cirino-images-compressor'); ?></th>
                         <td>
-                            <label>
-                                <input type="checkbox" name="cic_keep_original" value="1" <?php checked(!empty($settings['keep_original'])); ?> />
-                                <?php echo esc_html__('Keep original files after converting to WebP', 'cirino-images-compressor'); ?>
-                            </label>
+                            <select name="cic_optimization_level">
+                                <option value="lossless" <?php selected($settings['optimization_level'], CICConverter::LEVEL_LOSSLESS); ?>><?php echo esc_html__('Lossless', 'cirino-images-compressor'); ?></option>
+                                <option value="balanced" <?php selected($settings['optimization_level'], CICConverter::LEVEL_BALANCED); ?>><?php echo esc_html__('Balanced', 'cirino-images-compressor'); ?></option>
+                                <option value="aggressive" <?php selected($settings['optimization_level'], CICConverter::LEVEL_AGGRESSIVE); ?>><?php echo esc_html__('Aggressive', 'cirino-images-compressor'); ?></option>
+                                <option value="ultra" <?php selected($settings['optimization_level'], CICConverter::LEVEL_ULTRA); ?>><?php echo esc_html__('Ultra', 'cirino-images-compressor'); ?></option>
+                            </select>
+                            <p class="description"><?php echo esc_html__('Aggressive and Ultra target stronger size reduction while preserving visual quality.', 'cirino-images-compressor'); ?></p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><?php echo esc_html__('Force WebP default output', 'cirino-images-compressor'); ?></th>
-                        <td>
-                            <label>
-                                <input type="checkbox" name="cic_force_webp_output" value="1" <?php checked(!empty($settings['force_webp_output'])); ?> />
-                                <?php echo esc_html__('Force WordPress generated image output format to WebP when supported', 'cirino-images-compressor'); ?>
-                            </label>
-                        </td>
+                        <th scope="row"><?php echo esc_html__('JPEG quality', 'cirino-images-compressor'); ?></th>
+                        <td><input type="number" name="cic_jpeg_quality" min="1" max="100" value="<?php echo esc_attr((string) $settings['jpeg_quality']); ?>" class="small-text" /></td>
                     </tr>
                     <tr>
                         <th scope="row"><?php echo esc_html__('WebP quality', 'cirino-images-compressor'); ?></th>
-                        <td>
-                            <input type="number" name="cic_webp_quality" min="1" max="100" value="<?php echo esc_attr((string) $settings['webp_quality']); ?>" class="small-text" />
-                            <p class="description"><?php echo esc_html__('Valid range: 1 to 100.', 'cirino-images-compressor'); ?></p>
-                        </td>
+                        <td><input type="number" name="cic_webp_quality" min="1" max="100" value="<?php echo esc_attr((string) $settings['webp_quality']); ?>" class="small-text" /></td>
                     </tr>
                     <tr>
-                        <th scope="row"><?php echo esc_html__('WebP compression type', 'cirino-images-compressor'); ?></th>
-                        <td>
-                            <select name="cic_webp_compression_type">
-                                <option value="<?php echo esc_attr(CICConverter::COMPRESSION_LOSSY); ?>" <?php selected($settings['webp_compression_type'], CICConverter::COMPRESSION_LOSSY); ?>><?php echo esc_html__('Lossy', 'cirino-images-compressor'); ?></option>
-                                <option value="<?php echo esc_attr(CICConverter::COMPRESSION_LOSSLESS); ?>" <?php selected($settings['webp_compression_type'], CICConverter::COMPRESSION_LOSSLESS); ?>><?php echo esc_html__('Lossless', 'cirino-images-compressor'); ?></option>
-                            </select>
-                            <p class="description"><?php echo esc_html__('Lossless uses maximum quality (100).', 'cirino-images-compressor'); ?></p>
-                        </td>
+                        <th scope="row"><?php echo esc_html__('AVIF quality', 'cirino-images-compressor'); ?></th>
+                        <td><input type="number" name="cic_avif_quality" min="1" max="100" value="<?php echo esc_attr((string) $settings['avif_quality']); ?>" class="small-text" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('PNGQuant min quality', 'cirino-images-compressor'); ?></th>
+                        <td><input type="number" name="cic_pngquant_min_quality" min="1" max="100" value="<?php echo esc_attr((string) $settings['pngquant_min_quality']); ?>" class="small-text" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('PNGQuant max quality', 'cirino-images-compressor'); ?></th>
+                        <td><input type="number" name="cic_pngquant_max_quality" min="1" max="100" value="<?php echo esc_attr((string) $settings['pngquant_max_quality']); ?>" class="small-text" /></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('Remove metadata', 'cirino-images-compressor'); ?></th>
+                        <td><label><input type="checkbox" name="cic_strip_metadata" value="1" <?php checked(!empty($settings['strip_metadata'])); ?> /> <?php echo esc_html__('Strip EXIF/metadata when possible', 'cirino-images-compressor'); ?></label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('Convert to WebP', 'cirino-images-compressor'); ?></th>
+                        <td><label><input type="checkbox" name="cic_convert_to_webp" value="1" <?php checked(!empty($settings['convert_to_webp'])); ?> /> <?php echo esc_html__('Generate WebP alternatives for original and sub-sizes', 'cirino-images-compressor'); ?></label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('Try AVIF', 'cirino-images-compressor'); ?></th>
+                        <td><label><input type="checkbox" name="cic_try_avif" value="1" <?php checked(!empty($settings['try_avif'])); ?> /> <?php echo esc_html__('Generate AVIF only when server supports it', 'cirino-images-compressor'); ?></label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('Preserve original backup', 'cirino-images-compressor'); ?></th>
+                        <td><label><input type="checkbox" name="cic_preserve_original" value="1" <?php checked(!empty($settings['preserve_original'])); ?> /> <?php echo esc_html__('Keep .cic-bak backup after successful optimization', 'cirino-images-compressor'); ?></label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('Force WebP output in editor hook', 'cirino-images-compressor'); ?></th>
+                        <td><label><input type="checkbox" name="cic_force_webp_output" value="1" <?php checked(!empty($settings['force_webp_output'])); ?> /> <?php echo esc_html__('Enable image_editor_output_format mapping to WebP', 'cirino-images-compressor'); ?></label></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html__('Debug logs', 'cirino-images-compressor'); ?></th>
+                        <td><label><input type="checkbox" name="cic_debug_mode" value="1" <?php checked(!empty($settings['debug_mode'])); ?> /> <?php echo esc_html__('Write debug info to PHP error_log', 'cirino-images-compressor'); ?></label></td>
                     </tr>
                 </table>
-
-                <p><?php echo esc_html__('Converted attachments are set to use WebP as the default media file format.', 'cirino-images-compressor'); ?></p>
 
                 <?php submit_button(__('Save settings', 'cirino-images-compressor')); ?>
             </form>
 
             <div class="cic-actions">
-                <button type="button" class="cic-btn cic-btn-primary" id="cic-start-btn"><?php echo esc_html__('Start conversion', 'cirino-images-compressor'); ?></button>
-                <button type="button" class="cic-btn cic-btn-secondary" id="cic-stop-btn"><?php echo esc_html__('Stop conversion', 'cirino-images-compressor'); ?></button>
+                <button type="button" class="cic-btn cic-btn-primary" id="cic-start-btn"><?php echo esc_html__('Start optimization', 'cirino-images-compressor'); ?></button>
+                <button type="button" class="cic-btn cic-btn-secondary" id="cic-stop-btn"><?php echo esc_html__('Stop optimization', 'cirino-images-compressor'); ?></button>
                 <button type="button" class="cic-btn cic-btn-secondary" id="cic-apply-recommended-btn"><?php echo esc_html__('Apply recommended batch', 'cirino-images-compressor'); ?></button>
             </div>
 
             <div class="cic-status-grid">
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Process status', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-running">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('WebP support', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-webp-support">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Current month progress', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-month">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Total progress', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-total">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Total image attachments', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-total-images">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Pending images', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-pending">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Last monthly batch summary', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-month-batch">-</span>
-                </div>
-                <div class="cic-status-row">
-                    <span class="cic-label"><?php echo esc_html__('Batch performance benchmark', 'cirino-images-compressor'); ?></span>
-                    <span class="cic-value" id="cic-status-performance">-</span>
-                </div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Process status', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-running">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('WebP support', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-webp-support">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Capabilities', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-capabilities">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Current month progress', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-month">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Total progress', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-total">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Total image attachments', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-total-images">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Pending images', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-pending">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Last monthly batch summary', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-month-batch">-</span></div>
+                <div class="cic-status-row"><span class="cic-label"><?php echo esc_html__('Batch performance benchmark', 'cirino-images-compressor'); ?></span><span class="cic-value" id="cic-status-performance">-</span></div>
             </div>
         </div>
         <?php
@@ -260,26 +240,23 @@ final class CICAdminPage {
 
         check_admin_referer(self::NONCE_ACTION_SETTINGS, self::NONCE_FIELD);
 
-        $batchSizeRaw = isset($_POST['cic_batch_size']) ? wp_unslash($_POST['cic_batch_size']) : CICConverter::DEFAULT_BATCH_SIZE;
-        $keepOriginal = isset($_POST['cic_keep_original']) ? '1' : '0';
-        $forceWebpOutput = isset($_POST['cic_force_webp_output']) ? '1' : '0';
-        $qualityRaw = isset($_POST['cic_webp_quality']) ? wp_unslash($_POST['cic_webp_quality']) : CICConverter::DEFAULT_WEBP_QUALITY;
-        $compressionRaw = isset($_POST['cic_webp_compression_type']) ? wp_unslash($_POST['cic_webp_compression_type']) : CICConverter::DEFAULT_WEBP_COMPRESSION_TYPE;
+        update_option(CICConverter::OPTION_BATCH_SIZE, CICConverter::sanitizeBatchSize(isset($_POST['cic_batch_size']) ? wp_unslash($_POST['cic_batch_size']) : CICConverter::DEFAULT_BATCH_SIZE));
+        update_option(CICConverter::OPTION_OPTIMIZATION_LEVEL, CICConverter::sanitizeOptimizationLevel(isset($_POST['cic_optimization_level']) ? wp_unslash($_POST['cic_optimization_level']) : CICConverter::DEFAULT_OPTIMIZATION_LEVEL));
 
-        update_option(CICConverter::OPTION_BATCH_SIZE, CICConverter::sanitizeBatchSize($batchSizeRaw));
-        update_option(CICConverter::OPTION_KEEP_ORIGINAL, CICConverter::sanitizeKeepOriginal($keepOriginal));
-        update_option(CICConverter::OPTION_FORCE_WEBP_OUTPUT, CICConverter::sanitizeForceWebpOutput($forceWebpOutput));
-        update_option(CICConverter::OPTION_WEBP_QUALITY, CICConverter::sanitizeWebpQuality($qualityRaw));
-        update_option(CICConverter::OPTION_WEBP_COMPRESSION_TYPE, CICConverter::sanitizeWebpCompressionType($compressionRaw));
+        update_option(CICConverter::OPTION_STRIP_METADATA, CICConverter::sanitizeToggle(isset($_POST['cic_strip_metadata']) ? '1' : '0'));
+        update_option(CICConverter::OPTION_CONVERT_TO_WEBP, CICConverter::sanitizeToggle(isset($_POST['cic_convert_to_webp']) ? '1' : '0'));
+        update_option(CICConverter::OPTION_TRY_AVIF, CICConverter::sanitizeToggle(isset($_POST['cic_try_avif']) ? '1' : '0'));
+        update_option(CICConverter::OPTION_PRESERVE_ORIGINAL, CICConverter::sanitizeToggle(isset($_POST['cic_preserve_original']) ? '1' : '0'));
+        update_option(CICConverter::OPTION_FORCE_WEBP_OUTPUT, CICConverter::sanitizeToggle(isset($_POST['cic_force_webp_output']) ? '1' : '0'));
+        update_option(CICConverter::OPTION_DEBUG_MODE, CICConverter::sanitizeToggle(isset($_POST['cic_debug_mode']) ? '1' : '0'));
 
-        $redirectUrl = add_query_arg(
-            array(
-                'page' => self::PAGE_SLUG,
-                'cic_settings' => '1',
-            ),
-            admin_url('tools.php')
-        );
+        update_option(CICConverter::OPTION_JPEG_QUALITY, CICConverter::sanitizeQuality(isset($_POST['cic_jpeg_quality']) ? wp_unslash($_POST['cic_jpeg_quality']) : CICConverter::DEFAULT_JPEG_QUALITY, CICConverter::DEFAULT_JPEG_QUALITY));
+        update_option(CICConverter::OPTION_WEBP_QUALITY, CICConverter::sanitizeQuality(isset($_POST['cic_webp_quality']) ? wp_unslash($_POST['cic_webp_quality']) : CICConverter::DEFAULT_WEBP_QUALITY, CICConverter::DEFAULT_WEBP_QUALITY));
+        update_option(CICConverter::OPTION_AVIF_QUALITY, CICConverter::sanitizeQuality(isset($_POST['cic_avif_quality']) ? wp_unslash($_POST['cic_avif_quality']) : CICConverter::DEFAULT_AVIF_QUALITY, CICConverter::DEFAULT_AVIF_QUALITY));
+        update_option(CICConverter::OPTION_PNGQUANT_MIN_QUALITY, CICConverter::sanitizeQuality(isset($_POST['cic_pngquant_min_quality']) ? wp_unslash($_POST['cic_pngquant_min_quality']) : CICConverter::DEFAULT_PNGQUANT_MIN_QUALITY, CICConverter::DEFAULT_PNGQUANT_MIN_QUALITY));
+        update_option(CICConverter::OPTION_PNGQUANT_MAX_QUALITY, CICConverter::sanitizeQuality(isset($_POST['cic_pngquant_max_quality']) ? wp_unslash($_POST['cic_pngquant_max_quality']) : CICConverter::DEFAULT_PNGQUANT_MAX_QUALITY, CICConverter::DEFAULT_PNGQUANT_MAX_QUALITY));
 
+        $redirectUrl = add_query_arg(array('page' => self::PAGE_SLUG, 'cic_settings' => '1'), admin_url('tools.php'));
         wp_safe_redirect($redirectUrl);
         exit;
     }

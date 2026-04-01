@@ -1,0 +1,14 @@
+{
+  "name": "cirinojr/cirino-images-compressor",
+  "description": "Cirino Images Compressor - local test tooling",
+  "type": "wordpress-plugin",
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  },
+  "scripts": {
+    "test": "vendor/bin/phpunit -c phpunit.xml.dist"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}

@@ -50,7 +50,9 @@ final class CICPlugin {
         add_action('plugins_loaded', array($this, 'loadTextdomain'));
         add_filter('cron_schedules', array($this, 'registerCronSchedules'));
         add_action(self::CRON_HOOK, array($this, 'processCronBatch'));
-        add_filter('image_editor_output_format', array($this, 'forceWebpAsDefaultOutputFormat'));
+        add_filter('wp_editor_set_quality', array($this, 'filterEditorQuality'), 10, 2);
+        add_filter('image_editor_output_format', array($this, 'filterEditorOutputFormat'));
+        add_filter('wp_image_editors', array($this, 'prioritizeImageEditors'));
         add_filter('wp_generate_attachment_metadata', array($this, 'autoConvertUploadedImage'), 20, 2);
 
         if (is_admin()) {
@@ -102,7 +104,11 @@ final class CICPlugin {
         return $metadata;
     }
 
-    public function forceWebpAsDefaultOutputFormat($formats) {
+    public function filterEditorQuality($quality, $mimeType) {
+        return $this->converter->getEditorQualityForMime((string) $mimeType);
+    }
+
+    public function filterEditorOutputFormat($formats) {
         if (!$this->converter->isForceWebpOutputEnabled()) {
             return $formats;
         }
@@ -117,11 +123,25 @@ final class CICPlugin {
 
         $formats['image/jpeg'] = self::MIME_WEBP;
         $formats['image/png'] = self::MIME_WEBP;
-        $formats['image/gif'] = self::MIME_WEBP;
-        $formats['image/heic'] = self::MIME_WEBP;
-        $formats['image/heif'] = self::MIME_WEBP;
-        $formats[self::MIME_WEBP] = self::MIME_WEBP;
 
         return $formats;
+    }
+
+    public function prioritizeImageEditors($editors) {
+        if (!is_array($editors)) {
+            $editors = array();
+        }
+
+        $priority = array('WP_Image_Editor_Imagick', 'WP_Image_Editor_GD');
+        foreach (array_reverse($priority) as $className) {
+            $currentIndex = array_search($className, $editors, true);
+            if (false !== $currentIndex) {
+                unset($editors[$currentIndex]);
+            }
+
+            array_unshift($editors, $className);
+        }
+
+        return array_values(array_unique($editors));
     }
 }

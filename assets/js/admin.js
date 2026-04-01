@@ -84,6 +84,19 @@
 
     byId('cic-status-running').textContent = payload.running ? t('running', 'Running') : t('stopped', 'Stopped');
     byId('cic-status-webp-support').textContent = payload.webp_supported ? t('available', 'Available') : t('unavailable', 'Unavailable');
+
+    const capabilities = payload.capabilities || {};
+    const binaries = capabilities.binaries || {};
+    const summary = [
+      binaries.pngquant ? 'pngquant' : null,
+      binaries.oxipng ? 'oxipng' : null,
+      binaries.cwebp ? 'cwebp' : null,
+      binaries.avifenc ? 'avifenc' : null,
+      capabilities?.imagick?.available ? 'imagick' : null,
+      capabilities?.gd?.available ? 'gd' : null
+    ].filter(Boolean);
+    byId('cic-status-capabilities').textContent = summary.length ? summary.join(', ') : '-';
+
     byId('cic-status-month').textContent =
       `${formatPercent(payload.month.percentage)} (${payload.month.converted} / ${payload.month.total})`;
 

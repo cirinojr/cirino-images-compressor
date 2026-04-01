@@ -7,26 +7,53 @@ if (!defined('ABSPATH')) {
 final class CICConverter {
     private const STATUS_CACHE_KEY = 'cic_status_counts';
     private const STATUS_CACHE_TTL = 10;
-    public const COMPRESSION_LOSSY = 'lossy';
-    public const COMPRESSION_LOSSLESS = 'lossless';
-    public const META_CONVERTED = '_cic_webp_converted';
-    public const META_CONVERTED_AT = '_cic_webp_converted_at';
-    public const META_FAILED = '_cic_webp_failed';
+
+    public const META_CONVERTED = '_cic_optimized';
+    public const META_CONVERTED_AT = '_cic_optimized_at';
+    public const META_FAILED = '_cic_optimization_failed';
+    public const META_LAST_ENGINE = '_cic_optimization_engine';
+
     public const OPTION_RUNNING = 'cic_is_running';
     public const OPTION_BATCH_SIZE = 'cic_batch_size';
-    public const OPTION_KEEP_ORIGINAL = 'cic_keep_original';
-    public const OPTION_FORCE_WEBP_OUTPUT = 'cic_force_webp_output';
-    public const OPTION_WEBP_QUALITY = 'cic_webp_quality';
-    public const OPTION_WEBP_COMPRESSION_TYPE = 'cic_webp_compression_type';
     public const OPTION_BATCH_LOCK = 'cic_batch_lock';
     public const OPTION_PERFORMANCE_STATS = 'cic_performance_stats';
     public const OPTION_MONTH_PREFIX = 'cic_month_stats_';
+
+    public const OPTION_OPTIMIZATION_LEVEL = 'cic_optimization_level';
+    public const OPTION_STRIP_METADATA = 'cic_strip_metadata';
+    public const OPTION_CONVERT_TO_WEBP = 'cic_convert_to_webp';
+    public const OPTION_TRY_AVIF = 'cic_try_avif';
+    public const OPTION_PRESERVE_ORIGINAL = 'cic_preserve_original';
+    public const OPTION_FORCE_WEBP_OUTPUT = 'cic_force_webp_output';
+    public const OPTION_DEBUG_MODE = 'cic_debug_mode';
+
+    public const OPTION_JPEG_QUALITY = 'cic_jpeg_quality';
+    public const OPTION_WEBP_QUALITY = 'cic_webp_quality';
+    public const OPTION_AVIF_QUALITY = 'cic_avif_quality';
+    public const OPTION_PNGQUANT_MIN_QUALITY = 'cic_pngquant_min_quality';
+    public const OPTION_PNGQUANT_MAX_QUALITY = 'cic_pngquant_max_quality';
+
+    public const LEVEL_LOSSLESS = 'lossless';
+    public const LEVEL_BALANCED = 'balanced';
+    public const LEVEL_AGGRESSIVE = 'aggressive';
+    public const LEVEL_ULTRA = 'ultra';
+
     public const DEFAULT_BATCH_SIZE = 20;
+    public const DEFAULT_OPTIMIZATION_LEVEL = self::LEVEL_BALANCED;
+    public const DEFAULT_STRIP_METADATA = 1;
+    public const DEFAULT_CONVERT_TO_WEBP = 1;
+    public const DEFAULT_TRY_AVIF = 0;
+    public const DEFAULT_PRESERVE_ORIGINAL = 1;
+    public const DEFAULT_FORCE_WEBP_OUTPUT = 0;
+    public const DEFAULT_DEBUG_MODE = 0;
+
+    public const DEFAULT_JPEG_QUALITY = 78;
+    public const DEFAULT_WEBP_QUALITY = 80;
+    public const DEFAULT_AVIF_QUALITY = 50;
+    public const DEFAULT_PNGQUANT_MIN_QUALITY = 65;
+    public const DEFAULT_PNGQUANT_MAX_QUALITY = 85;
+
     private const MAX_BATCH_SIZE = 200;
-    public const DEFAULT_KEEP_ORIGINAL = 1;
-    public const DEFAULT_FORCE_WEBP_OUTPUT = 1;
-    public const DEFAULT_WEBP_QUALITY = 82;
-    public const DEFAULT_WEBP_COMPRESSION_TYPE = self::COMPRESSION_LOSSY;
     private const BATCH_LOCK_TTL = 300;
 
     /**
@@ -35,18 +62,19 @@ final class CICConverter {
     private $fileConversionService;
 
     /**
-     * @var CICAttachmentMetadataService
-     */
-    private $attachmentMetadataService;
-
-    /**
      * @var CICImageStatsService
      */
     private $imageStatsService;
 
+    /**
+     * @var CICDebugLogger
+     */
+    private $logger;
+
     public function __construct() {
-        $this->fileConversionService = new CICFileConversionService();
-        $this->attachmentMetadataService = new CICAttachmentMetadataService($this->fileConversionService);
+        $capabilities = new CICCapabilitiesDetector();
+        $this->logger = new CICDebugLogger(self::OPTION_DEBUG_MODE);
+        $this->fileConversionService = new CICFileConversionService($capabilities, $this->logger);
         $this->imageStatsService = new CICImageStatsService($this->fileConversionService);
     }
 
@@ -65,44 +93,58 @@ final class CICConverter {
         return (bool) get_option(self::OPTION_RUNNING, 0);
     }
 
+    /**
+     * @return array<string,mixed>
+     */
     public function getSettings() {
         return array(
             'batch_size' => $this->getBatchSize(),
-            'keep_original' => $this->isKeepOriginalEnabled(),
-            'force_webp_output' => $this->isForceWebpOutputEnabled(),
+            'optimization_level' => $this->getOptimizationLevel(),
+            'strip_metadata' => $this->isEnabledOption(self::OPTION_STRIP_METADATA, self::DEFAULT_STRIP_METADATA),
+            'convert_to_webp' => $this->isEnabledOption(self::OPTION_CONVERT_TO_WEBP, self::DEFAULT_CONVERT_TO_WEBP),
+            'try_avif' => $this->isEnabledOption(self::OPTION_TRY_AVIF, self::DEFAULT_TRY_AVIF),
+            'preserve_original' => $this->isEnabledOption(self::OPTION_PRESERVE_ORIGINAL, self::DEFAULT_PRESERVE_ORIGINAL),
+            'force_webp_output' => $this->isEnabledOption(self::OPTION_FORCE_WEBP_OUTPUT, self::DEFAULT_FORCE_WEBP_OUTPUT),
+            'debug_mode' => $this->isEnabledOption(self::OPTION_DEBUG_MODE, self::DEFAULT_DEBUG_MODE),
+            'jpeg_quality' => $this->getJpegQuality(),
             'webp_quality' => $this->getWebpQuality(),
-            'webp_compression_type' => $this->getWebpCompressionType(),
+            'avif_quality' => $this->getAvifQuality(),
+            'pngquant_min_quality' => $this->getPngquantMinQuality(),
+            'pngquant_max_quality' => $this->getPngquantMaxQuality(),
         );
     }
 
-    public static function sanitizeKeepOriginal($value) {
+    public static function sanitizeToggle($value) {
         return !empty($value) ? 1 : 0;
     }
 
-    public static function sanitizeForceWebpOutput($value) {
-        return !empty($value) ? 1 : 0;
-    }
-
-    public static function sanitizeWebpQuality($value) {
-        $quality = (int) $value;
-        if ($quality < 1) {
-            $quality = 1;
+    public static function sanitizeBatchSize($value) {
+        $batchSize = (int) $value;
+        if ($batchSize < 1) {
+            return self::DEFAULT_BATCH_SIZE;
         }
 
-        if ($quality > 100) {
-            $quality = 100;
+        if ($batchSize > self::MAX_BATCH_SIZE) {
+            return self::MAX_BATCH_SIZE;
+        }
+
+        return $batchSize;
+    }
+
+    public static function sanitizeOptimizationLevel($value) {
+        $level = strtolower(trim((string) $value));
+        $allowed = array(self::LEVEL_LOSSLESS, self::LEVEL_BALANCED, self::LEVEL_AGGRESSIVE, self::LEVEL_ULTRA);
+
+        return in_array($level, $allowed, true) ? $level : self::DEFAULT_OPTIMIZATION_LEVEL;
+    }
+
+    public static function sanitizeQuality($value, $default = 80, $min = 1, $max = 100) {
+        $quality = (int) $value;
+        if ($quality < $min || $quality > $max) {
+            return (int) $default;
         }
 
         return $quality;
-    }
-
-    public static function sanitizeWebpCompressionType($value) {
-        $type = strtolower(trim((string) $value));
-        if (self::COMPRESSION_LOSSLESS === $type) {
-            return self::COMPRESSION_LOSSLESS;
-        }
-
-        return self::COMPRESSION_LOSSY;
     }
 
     public function processBatch() {
@@ -128,7 +170,7 @@ final class CICConverter {
 
         try {
             $batchSize = self::sanitizeBatchSize(get_option(self::OPTION_BATCH_SIZE, self::DEFAULT_BATCH_SIZE));
-            $conversionContext = $this->buildConversionContext();
+            $options = $this->buildOptimizationOptions();
 
             $query = new WP_Query(
                 array(
@@ -165,7 +207,7 @@ final class CICConverter {
 
             foreach ($query->posts as $attachmentId) {
                 $processed++;
-                if ($this->processAttachment((int) $attachmentId, null, $conversionContext, false)) {
+                if ($this->processAttachment((int) $attachmentId, null, $options, false)) {
                     $converted++;
                 } else {
                     $failed++;
@@ -196,53 +238,69 @@ final class CICConverter {
         }
     }
 
-    public function processAttachment($attachmentId, $attachmentMetadata = null, $conversionContext = null, $clearStatusCacheOnSuccess = true) {
+    /**
+     * @param int $attachmentId
+     * @param array<string,mixed>|null $attachmentMetadata
+     * @param array<string,mixed>|null $optimizationOptions
+     * @param bool $clearStatusCacheOnSuccess
+     *
+     * @return bool
+     */
+    public function processAttachment($attachmentId, $attachmentMetadata = null, $optimizationOptions = null, $clearStatusCacheOnSuccess = true) {
         $filePath = '';
-        $validationError = $this->validateAttachmentForConversion($attachmentId, $filePath);
+        $validationError = $this->validateAttachmentForConversion((int) $attachmentId, $filePath);
         if ('' !== $validationError) {
             update_post_meta($attachmentId, self::META_FAILED, $validationError);
             return false;
         }
 
         $metadata = is_array($attachmentMetadata) ? $attachmentMetadata : wp_get_attachment_metadata($attachmentId);
-        $context = is_array($conversionContext) ? $conversionContext : $this->buildConversionContext();
-        $legacyPaths = array();
-        $shouldKeepOriginal = !empty($context['keep_original']);
-
-        if (!$shouldKeepOriginal) {
-            $legacyPaths = $this->fileConversionService->collectLegacyPaths($filePath, $metadata);
-        }
+        $options = is_array($optimizationOptions) ? $optimizationOptions : $this->buildOptimizationOptions();
 
         $failureReason = '';
-        $compressionType = isset($context['compression_type']) ? (string) $context['compression_type'] : $this->getWebpCompressionType();
-        $quality = isset($context['quality']) ? (int) $context['quality'] : $this->getWebpQuality();
+        $originalEngine = '';
+        $thumbEngines = array();
 
-        $originalSuccess = $this->fileConversionService->convertOriginalFile($filePath, $compressionType, $quality, $failureReason);
-        $thumbnailSuccess = $this->fileConversionService->convertThumbnails($attachmentId, $filePath, $metadata, $compressionType, $quality, $failureReason);
-        $webpAsDefaultSuccess = false;
+        $originalSuccess = $this->fileConversionService->convertOriginalFile($filePath, $options, $failureReason, $originalEngine);
+        $thumbnailSuccess = $this->fileConversionService->convertThumbnails($attachmentId, $filePath, $metadata, $options, $failureReason, $thumbEngines);
+        $this->fileConversionService->generateAlternativeFormats($filePath, $options);
 
         if ($originalSuccess && $thumbnailSuccess) {
-            $webpAsDefaultSuccess = $this->attachmentMetadataService->setAttachmentToWebp($attachmentId, $filePath, $metadata, $failureReason);
-            if ($webpAsDefaultSuccess && !$shouldKeepOriginal) {
-                $this->fileConversionService->deleteLegacyFiles($legacyPaths);
-            }
-        }
-
-        if ($originalSuccess && $thumbnailSuccess && $webpAsDefaultSuccess) {
             update_post_meta($attachmentId, self::META_CONVERTED, '1');
             update_post_meta($attachmentId, self::META_CONVERTED_AT, current_time('mysql'));
+
+            $engines = array_values(array_unique(array_filter(array_merge(array($originalEngine), $thumbEngines))));
+            if (!empty($engines)) {
+                update_post_meta($attachmentId, self::META_LAST_ENGINE, implode(', ', $engines));
+            }
+
             delete_post_meta($attachmentId, self::META_FAILED);
+
+            $this->logger->log('attachment_optimized', array(
+                'attachment_id' => (int) $attachmentId,
+                'file' => $filePath,
+                'engines' => $engines,
+                'options' => $options,
+            ));
+
             if ($clearStatusCacheOnSuccess) {
                 $this->clearStatusCache();
             }
+
             return true;
         }
 
         if ('' === $failureReason) {
-            $failureReason = 'save_error';
+            $failureReason = 'optimize_failed';
         }
 
         update_post_meta($attachmentId, self::META_FAILED, $failureReason);
+
+        $this->logger->log('attachment_optimization_failed', array(
+            'attachment_id' => (int) $attachmentId,
+            'file' => $filePath,
+            'failure' => $failureReason,
+        ));
 
         return false;
     }
@@ -257,6 +315,7 @@ final class CICConverter {
         );
 
         $status['performance'] = $this->getPerformanceStatus();
+        $status['capabilities'] = $this->fileConversionService->getCapabilities();
 
         return $status;
     }
@@ -268,80 +327,162 @@ final class CICConverter {
         return $recommended;
     }
 
-    private function validateAttachmentForConversion($attachmentId, &$filePath) {
-        $error = '';
-
-        if (!wp_attachment_is_image($attachmentId)) {
-            $error = 'not_image';
-        } else {
-            $filePath = (string) get_attached_file($attachmentId);
-            if ('' === $filePath || !file_exists($filePath)) {
-                $error = 'missing_file';
-            } elseif (!$this->fileConversionService->isPathInUploads($filePath)) {
-                $error = 'invalid_file_path';
-            } else {
-                $mime = (string) get_post_mime_type($attachmentId);
-                if (0 !== strpos($mime, 'image/')) {
-                    $error = 'invalid_mime';
-                }
-            }
-        }
-
-        return $error;
-    }
-
-    private function isKeepOriginalEnabled() {
-        $value = get_option(self::OPTION_KEEP_ORIGINAL, self::DEFAULT_KEEP_ORIGINAL);
-
-        return 1 === self::sanitizeKeepOriginal($value);
-    }
-
     public function isForceWebpOutputEnabled() {
-        $value = get_option(self::OPTION_FORCE_WEBP_OUTPUT, self::DEFAULT_FORCE_WEBP_OUTPUT);
-
-        return 1 === self::sanitizeForceWebpOutput($value);
+        return $this->isEnabledOption(self::OPTION_FORCE_WEBP_OUTPUT, self::DEFAULT_FORCE_WEBP_OUTPUT);
     }
 
-    public static function sanitizeBatchSize($value) {
-        $batchSize = (int) $value;
+    public function getEditorQualityForMime($mimeType) {
+        $mime = strtolower((string) $mimeType);
 
-        if ($batchSize < 1) {
-            return self::DEFAULT_BATCH_SIZE;
+        if ('image/jpeg' === $mime || 'image/jpg' === $mime) {
+            return $this->getJpegQuality();
         }
 
-        if ($batchSize > self::MAX_BATCH_SIZE) {
-            return self::MAX_BATCH_SIZE;
+        if ('image/webp' === $mime) {
+            return $this->getWebpQuality();
         }
 
-        return $batchSize;
+        if ('image/avif' === $mime) {
+            return $this->getAvifQuality();
+        }
+
+        return $this->getJpegQuality();
     }
 
-    private function getWebpQuality() {
-        $quality = get_option(self::OPTION_WEBP_QUALITY, self::DEFAULT_WEBP_QUALITY);
+    private function validateAttachmentForConversion($attachmentId, &$filePath) {
+        if (!wp_attachment_is_image($attachmentId)) {
+            return 'not_image';
+        }
 
-        return self::sanitizeWebpQuality($quality);
+        $filePath = (string) get_attached_file($attachmentId);
+        if ('' === $filePath || !file_exists($filePath)) {
+            return 'missing_file';
+        }
+
+        if (!$this->fileConversionService->isPathInUploads($filePath)) {
+            return 'invalid_file_path';
+        }
+
+        $mime = (string) get_post_mime_type($attachmentId);
+        if (0 !== strpos($mime, 'image/') || 'image/svg+xml' === strtolower($mime)) {
+            return 'invalid_mime';
+        }
+
+        return '';
     }
 
-    private function getWebpCompressionType() {
-        $type = get_option(self::OPTION_WEBP_COMPRESSION_TYPE, self::DEFAULT_WEBP_COMPRESSION_TYPE);
-
-        return self::sanitizeWebpCompressionType($type);
+    private function isEnabledOption($key, $default = 0) {
+        return 1 === self::sanitizeToggle(get_option((string) $key, (int) $default));
     }
 
     private function getBatchSize() {
         return self::sanitizeBatchSize(get_option(self::OPTION_BATCH_SIZE, self::DEFAULT_BATCH_SIZE));
     }
 
-    private function clearStatusCache() {
-        delete_transient(self::STATUS_CACHE_KEY);
+    private function getOptimizationLevel() {
+        return self::sanitizeOptimizationLevel(get_option(self::OPTION_OPTIMIZATION_LEVEL, self::DEFAULT_OPTIMIZATION_LEVEL));
     }
 
-    private function buildConversionContext() {
-        return array(
-            'keep_original' => $this->isKeepOriginalEnabled(),
-            'compression_type' => $this->getWebpCompressionType(),
-            'quality' => $this->getWebpQuality(),
+    private function getJpegQuality() {
+        return self::sanitizeQuality(get_option(self::OPTION_JPEG_QUALITY, self::DEFAULT_JPEG_QUALITY), self::DEFAULT_JPEG_QUALITY);
+    }
+
+    private function getWebpQuality() {
+        return self::sanitizeQuality(get_option(self::OPTION_WEBP_QUALITY, self::DEFAULT_WEBP_QUALITY), self::DEFAULT_WEBP_QUALITY);
+    }
+
+    private function getAvifQuality() {
+        return self::sanitizeQuality(get_option(self::OPTION_AVIF_QUALITY, self::DEFAULT_AVIF_QUALITY), self::DEFAULT_AVIF_QUALITY);
+    }
+
+    private function getPngquantMinQuality() {
+        return self::sanitizeQuality(
+            get_option(self::OPTION_PNGQUANT_MIN_QUALITY, self::DEFAULT_PNGQUANT_MIN_QUALITY),
+            self::DEFAULT_PNGQUANT_MIN_QUALITY
         );
+    }
+
+    private function getPngquantMaxQuality() {
+        return self::sanitizeQuality(
+            get_option(self::OPTION_PNGQUANT_MAX_QUALITY, self::DEFAULT_PNGQUANT_MAX_QUALITY),
+            self::DEFAULT_PNGQUANT_MAX_QUALITY
+        );
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function buildOptimizationOptions() {
+        $level = $this->getOptimizationLevel();
+        $preset = $this->getLevelPreset($level);
+
+        $pngMin = $this->getPngquantMinQuality();
+        $pngMax = $this->getPngquantMaxQuality();
+        if ($pngMin > $pngMax) {
+            $tmp = $pngMin;
+            $pngMin = $pngMax;
+            $pngMax = $tmp;
+        }
+
+        return array(
+            'level' => $level,
+            'strip_metadata' => $this->isEnabledOption(self::OPTION_STRIP_METADATA, self::DEFAULT_STRIP_METADATA),
+            'preserve_original' => $this->isEnabledOption(self::OPTION_PRESERVE_ORIGINAL, self::DEFAULT_PRESERVE_ORIGINAL),
+            'convert_to_webp' => $this->isEnabledOption(self::OPTION_CONVERT_TO_WEBP, self::DEFAULT_CONVERT_TO_WEBP),
+            'try_avif' => $this->isEnabledOption(self::OPTION_TRY_AVIF, self::DEFAULT_TRY_AVIF),
+            'jpeg_quality' => self::sanitizeQuality(get_option(self::OPTION_JPEG_QUALITY, $preset['jpeg_quality']), $preset['jpeg_quality']),
+            'webp_quality' => self::sanitizeQuality(get_option(self::OPTION_WEBP_QUALITY, $preset['webp_quality']), $preset['webp_quality']),
+            'avif_quality' => self::sanitizeQuality(get_option(self::OPTION_AVIF_QUALITY, $preset['avif_quality']), $preset['avif_quality']),
+            'pngquant_min_quality' => $pngMin,
+            'pngquant_max_quality' => $pngMax,
+            'jpeg_progressive' => true,
+            'compression_effort' => $preset['compression_effort'],
+        );
+    }
+
+    /**
+     * @param string $level
+     *
+     * @return array<string,int>
+     */
+    private function getLevelPreset($level) {
+        if (self::LEVEL_LOSSLESS === $level) {
+            return array(
+                'jpeg_quality' => 92,
+                'webp_quality' => 92,
+                'avif_quality' => 60,
+                'compression_effort' => 4,
+            );
+        }
+
+        if (self::LEVEL_AGGRESSIVE === $level) {
+            return array(
+                'jpeg_quality' => 68,
+                'webp_quality' => 72,
+                'avif_quality' => 45,
+                'compression_effort' => 6,
+            );
+        }
+
+        if (self::LEVEL_ULTRA === $level) {
+            return array(
+                'jpeg_quality' => 62,
+                'webp_quality' => 66,
+                'avif_quality' => 38,
+                'compression_effort' => 6,
+            );
+        }
+
+        return array(
+            'jpeg_quality' => self::DEFAULT_JPEG_QUALITY,
+            'webp_quality' => self::DEFAULT_WEBP_QUALITY,
+            'avif_quality' => self::DEFAULT_AVIF_QUALITY,
+            'compression_effort' => 5,
+        );
+    }
+
+    private function clearStatusCache() {
+        delete_transient(self::STATUS_CACHE_KEY);
     }
 
     private function acquireBatchLock() {
@@ -383,7 +524,7 @@ final class CICConverter {
             )
         );
 
-        $stats['runs'] = (int) $stats['runs'] + 1;
+        $stats['runs'] = (int) $stats['runs'] + (int) 1;
         $stats['processed_total'] = (int) $stats['processed_total'] + (int) $processed;
         $stats['converted_total'] = (int) $stats['converted_total'] + (int) $converted;
         $stats['failed_total'] = (int) $stats['failed_total'] + (int) $failed;
@@ -396,22 +537,23 @@ final class CICConverter {
         update_option(self::OPTION_PERFORMANCE_STATS, $stats);
     }
 
+    /**
+     * @return array<string,mixed>
+     */
     private function getPerformanceStatus() {
         $stats = get_option(self::OPTION_PERFORMANCE_STATS, array());
 
-        $runs = isset($stats['runs']) ? (int) $stats['runs'] : 0;
         $processedTotal = isset($stats['processed_total']) ? (int) $stats['processed_total'] : 0;
         $durationTotal = isset($stats['duration_ms_total']) ? (int) $stats['duration_ms_total'] : 0;
         $averageMsPerImage = ($processedTotal > 0) ? round($durationTotal / $processedTotal, 2) : 0.0;
-        $recommendedBatchSize = $this->getRecommendedBatchSize($averageMsPerImage);
 
         return array(
-            'runs' => $runs,
+            'runs' => isset($stats['runs']) ? (int) $stats['runs'] : 0,
             'last_duration_ms' => isset($stats['last_duration_ms']) ? (int) $stats['last_duration_ms'] : 0,
             'last_processed' => isset($stats['last_processed']) ? (int) $stats['last_processed'] : 0,
             'last_batch_size' => isset($stats['last_batch_size']) ? (int) $stats['last_batch_size'] : $this->getBatchSize(),
             'average_ms_per_image' => $averageMsPerImage,
-            'recommended_batch_size' => $recommendedBatchSize,
+            'recommended_batch_size' => $this->getRecommendedBatchSize($averageMsPerImage),
             'last_run_at' => isset($stats['last_run_at']) ? (string) $stats['last_run_at'] : '',
         );
     }

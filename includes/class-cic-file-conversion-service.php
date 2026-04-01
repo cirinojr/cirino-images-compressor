@@ -5,23 +5,71 @@ if (!defined('ABSPATH')) {
 }
 
 final class CICFileConversionService {
-    private const MIME_WEBP = 'image/webp';
+    private const ALLOWED_MIMES = array('image/jpeg', 'image/png', 'image/webp', 'image/avif');
+
+    /**
+     * @var CICCapabilitiesDetector
+     */
+    private $capabilities;
+
+    /**
+     * @var CICDebugLogger
+     */
+    private $logger;
+
+    /**
+     * @var CICOptimizerInterface[]
+     */
+    private $optimizers;
+
     /**
      * @var string|null
      */
     private static $uploadsBaseDirCache = null;
 
-    public function convertOriginalFile($filePath, $compressionType, $quality, &$failureReason) {
-        $isAlreadyWebp = 'webp' === strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        if ($isAlreadyWebp) {
-            return true;
-        }
+    public function __construct(CICCapabilitiesDetector $capabilities, CICDebugLogger $logger, $optimizers = array()) {
+        $this->capabilities = $capabilities;
+        $this->logger = $logger;
 
-        return $this->saveAsWebp($filePath, $compressionType, $quality, $failureReason);
+        if (!empty($optimizers)) {
+            $this->optimizers = $optimizers;
+        } else {
+            $this->optimizers = array(
+                new CICBinaryOptimizerProvider($this->capabilities, $this->logger),
+                new CICImagickOptimizerProvider($this->capabilities),
+                new CICGdOptimizerProvider($this->capabilities),
+            );
+        }
     }
 
-    public function convertThumbnails($attachmentId, $originalFilePath, $attachmentMetadata, $compressionType, $quality, &$failureReason) {
-        $thumbnailFiles = $this->getThumbnailFilePaths($attachmentId, $originalFilePath, $attachmentMetadata);
+    /**
+     * @param string $filePath
+     * @param array<string,mixed> $options
+     * @param string $failureReason
+     * @param string $engineUsed
+     *
+     * @return bool
+     */
+    public function convertOriginalFile($filePath, $options, &$failureReason, &$engineUsed) {
+        $result = $this->optimizeFile($filePath, $options);
+        $failureReason = isset($result['reason']) ? (string) $result['reason'] : '';
+        $engineUsed = isset($result['engine']) ? (string) $result['engine'] : '';
+
+        return !empty($result['success']);
+    }
+
+    /**
+     * @param int $attachmentId
+     * @param string $originalFilePath
+     * @param array<string,mixed>|null $attachmentMetadata
+     * @param array<string,mixed> $options
+     * @param string $failureReason
+     * @param array<int,string> $enginesUsed
+     *
+     * @return bool
+     */
+    public function convertThumbnails($attachmentId, $originalFilePath, $attachmentMetadata, $options, &$failureReason, &$enginesUsed) {
+        $thumbnailFiles = $this->getThumbnailFilePaths((int) $attachmentId, $originalFilePath, $attachmentMetadata);
 
         if (empty($thumbnailFiles)) {
             return true;
@@ -29,70 +77,148 @@ final class CICFileConversionService {
 
         $allSuccessful = true;
         foreach ($thumbnailFiles as $thumbnailFilePath) {
-            $isThumbWebp = 'webp' === strtolower(pathinfo($thumbnailFilePath, PATHINFO_EXTENSION));
-            if ($isThumbWebp) {
-                continue;
+            $result = $this->optimizeFile($thumbnailFilePath, $options);
+            if (!empty($result['engine'])) {
+                $enginesUsed[] = (string) $result['engine'];
             }
 
-            $thumbnailFailureReason = '';
-            if (!$this->saveAsWebp($thumbnailFilePath, $compressionType, $quality, $thumbnailFailureReason)) {
+            if (empty($result['success'])) {
                 $allSuccessful = false;
-                if ('' === $failureReason && '' !== $thumbnailFailureReason) {
-                    $failureReason = $thumbnailFailureReason;
+                if ('' === $failureReason && !empty($result['reason'])) {
+                    $failureReason = (string) $result['reason'];
                 }
             }
+
+            $this->generateAlternativeFormats($thumbnailFilePath, $options);
         }
 
         return $allSuccessful;
     }
 
-    public function collectLegacyPaths($originalFilePath, $attachmentMetadata) {
-        $paths = array();
-        if ('' !== $originalFilePath) {
-            $paths[] = $originalFilePath;
+    /**
+     * @param string $filePath
+     * @param array<string,mixed> $options
+     *
+     * @return void
+     */
+    public function generateAlternativeFormats($filePath, $options) {
+        $filePath = (string) $filePath;
+        if (!file_exists($filePath) || !$this->isPathInUploads($filePath)) {
+            return;
         }
 
-        if (is_array($attachmentMetadata) && !empty($attachmentMetadata['sizes']) && is_array($attachmentMetadata['sizes'])) {
-            $baseDir = trailingslashit(pathinfo($originalFilePath, PATHINFO_DIRNAME));
-            foreach ($attachmentMetadata['sizes'] as $sizeData) {
-                if (!is_array($sizeData) || empty($sizeData['file'])) {
-                    continue;
-                }
-
-                $thumbFileName = wp_basename((string) $sizeData['file']);
-                if ('' === $thumbFileName) {
-                    continue;
-                }
-
-                $thumbPath = $baseDir . $thumbFileName;
-                if (file_exists($thumbPath)) {
-                    $paths[] = $thumbPath;
-                }
-            }
+        $sourceMime = $this->detectRealMimeType($filePath);
+        if (!in_array($sourceMime, self::ALLOWED_MIMES, true)) {
+            return;
         }
 
-        return array_values(array_unique($paths));
-    }
+        if (!empty($options['convert_to_webp'])) {
+            $this->generateAlternativeFile($filePath, 'image/webp', $options);
+        }
 
-    public function deleteLegacyFiles($paths) {
-        foreach ($paths as $path) {
-            if (!is_string($path) || '' === $path) {
-                continue;
-            }
-
-            $isWebp = 'webp' === strtolower(pathinfo($path, PATHINFO_EXTENSION));
-            if ($isWebp || !file_exists($path) || !$this->isPathInUploads($path)) {
-                continue;
-            }
-
-            wp_delete_file($path);
+        if (!empty($options['try_avif'])) {
+            $this->generateAlternativeFile($filePath, 'image/avif', $options);
         }
     }
 
-    public function replacePathExtensionToWebp($path) {
-        $webpPath = preg_replace('/\.[^.]+$/', '.webp', (string) $path);
+    /**
+     * @param string $filePath
+     * @param array<string,mixed> $options
+     *
+     * @return array<string,mixed>
+     */
+    public function optimizeFile($filePath, $options) {
+        $filePath = (string) $filePath;
 
-        return is_string($webpPath) ? $webpPath : '';
+        if ('' === $filePath || !file_exists($filePath)) {
+            return array('success' => false, 'reason' => 'missing_file', 'engine' => '');
+        }
+
+        if (!$this->isPathInUploads($filePath)) {
+            return array('success' => false, 'reason' => 'invalid_file_path', 'engine' => '');
+        }
+
+        $sourceMime = $this->detectRealMimeType($filePath);
+        if ('image/svg+xml' === $sourceMime) {
+            return array('success' => false, 'reason' => 'unsupported_svg', 'engine' => '');
+        }
+
+        if (!in_array($sourceMime, self::ALLOWED_MIMES, true)) {
+            return array('success' => false, 'reason' => 'unsupported_mime:' . $sourceMime, 'engine' => '');
+        }
+
+        $sourceSize = (int) @filesize($filePath);
+        if ($sourceSize <= 0) {
+            return array('success' => false, 'reason' => 'empty_file', 'engine' => '');
+        }
+
+        $targetMime = $sourceMime;
+        $tempPath = $this->createTempPath($filePath, $targetMime);
+        $backupPath = $filePath . '.cic-bak';
+
+        $safeBackup = @copy($filePath, $backupPath);
+        if (!$safeBackup) {
+            return array('success' => false, 'reason' => 'backup_failed', 'engine' => '');
+        }
+
+        $result = $this->runOptimizerChain($filePath, $tempPath, $sourceMime, $targetMime, $options);
+        if (empty($result['success']) || !file_exists($tempPath)) {
+            @unlink($backupPath);
+            if (file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+
+            return array(
+                'success' => false,
+                'reason' => isset($result['reason']) ? (string) $result['reason'] : 'optimize_failed',
+                'engine' => isset($result['engine']) ? (string) $result['engine'] : '',
+            );
+        }
+
+        $optimizedSize = (int) @filesize($tempPath);
+        if ($optimizedSize <= 0 || $optimizedSize >= $sourceSize) {
+            @unlink($tempPath);
+            @unlink($backupPath);
+
+            return array(
+                'success' => true,
+                'reason' => 'kept_original_better_or_equal',
+                'engine' => isset($result['engine']) ? (string) $result['engine'] : '',
+            );
+        }
+
+        $replaced = @copy($tempPath, $filePath);
+        @unlink($tempPath);
+
+        if (!$replaced) {
+            @copy($backupPath, $filePath);
+            @unlink($backupPath);
+
+            return array(
+                'success' => false,
+                'reason' => 'replace_failed',
+                'engine' => isset($result['engine']) ? (string) $result['engine'] : '',
+            );
+        }
+
+        if (empty($options['preserve_original'])) {
+            @unlink($backupPath);
+        }
+
+        return array(
+            'success' => true,
+            'reason' => 'optimized',
+            'engine' => isset($result['engine']) ? (string) $result['engine'] : '',
+            'before' => $sourceSize,
+            'after' => $optimizedSize,
+        );
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function getCapabilities() {
+        return $this->capabilities->getCapabilities();
     }
 
     public function isPathInUploads($path, $allowNotExistingFile = false) {
@@ -110,15 +236,21 @@ final class CICFileConversionService {
     }
 
     public function isWebpSupported() {
-        static $supported = null;
+        $capabilities = $this->getCapabilities();
 
-        if (null === $supported) {
-            $supported = wp_image_editor_supports(array('mime_type' => self::MIME_WEBP));
-        }
-
-        return (bool) $supported;
+        return !empty($capabilities['wp']['supports_webp'])
+            || !empty($capabilities['imagick']['supports_webp'])
+            || !empty($capabilities['gd']['supports_webp'])
+            || !empty($capabilities['binaries']['cwebp']);
     }
 
+    /**
+     * @param int $attachmentId
+     * @param string $originalFilePath
+     * @param array<string,mixed>|null $attachmentMetadata
+     *
+     * @return array<int,string>
+     */
     private function getThumbnailFilePaths($attachmentId, $originalFilePath, $attachmentMetadata) {
         if (!is_string($originalFilePath) || '' === $originalFilePath) {
             return array();
@@ -153,130 +285,155 @@ final class CICFileConversionService {
         return array_values(array_unique($paths));
     }
 
-    private function saveAsWebp($filePath, $compressionType, $quality, &$failureReason = '') {
-        $isSuccessful = false;
-        $effectiveQuality = $this->getEffectiveWebpQuality($quality, $compressionType);
-        $webpPath = $this->replacePathExtensionToWebp($filePath);
-
-        if ($this->hasReusableWebpFile($filePath, $webpPath)) {
-            return true;
+    /**
+     * @param string $sourcePath
+     * @param string $targetMime
+     * @param array<string,mixed> $options
+     *
+     * @return void
+     */
+    private function generateAlternativeFile($sourcePath, $targetMime, $options) {
+        $ext = 'image/webp' === $targetMime ? 'webp' : 'avif';
+        $destPath = preg_replace('/\.[^.]+$/', '.' . $ext, (string) $sourcePath);
+        if (!is_string($destPath) || '' === $destPath || !$this->isPathInUploads($destPath, true)) {
+            return;
         }
 
-        if ($this->validateWebpPaths($filePath, $webpPath, $failureReason)) {
-            $editorResult = $this->saveAsWebpWithEditor($filePath, $webpPath, $effectiveQuality, $failureReason);
-            if (true === $editorResult) {
-                $isSuccessful = true;
-            } elseif (null !== $editorResult) {
-                $isSuccessful = $this->saveAsWebpWithGd($filePath, $webpPath, $effectiveQuality, $failureReason);
+        $sourceMime = $this->detectRealMimeType($sourcePath);
+        $result = $this->runOptimizerChain($sourcePath, $destPath, $sourceMime, $targetMime, $options);
+        if (empty($result['success']) || !file_exists($destPath)) {
+            if (file_exists($destPath)) {
+                @unlink($destPath);
             }
+            return;
         }
 
-        return $isSuccessful;
-    }
+        $sourceSize = (int) @filesize($sourcePath);
+        $generatedSize = (int) @filesize($destPath);
 
-    private function validateWebpPaths($filePath, $webpPath, &$failureReason) {
-        $isValid = '' !== $webpPath
-            && $this->isPathInUploads($filePath)
-            && $this->isPathInUploads($webpPath, true);
-
-        if (!$isValid) {
-            $failureReason = 'invalid_target_path';
+        if ($generatedSize <= 0 || $generatedSize >= $sourceSize) {
+            @unlink($destPath);
+            return;
         }
 
-        return $isValid;
+        $this->logger->log('generated_alternative_format', array(
+            'source' => $sourcePath,
+            'dest' => $destPath,
+            'engine' => isset($result['engine']) ? (string) $result['engine'] : '',
+            'target_mime' => $targetMime,
+        ));
     }
 
-    private function saveAsWebpWithEditor($filePath, $webpPath, $quality, &$failureReason) {
-        $result = false;
-        $qualityIsFatal = false;
+    /**
+     * @param string $sourcePath
+     * @param string $destPath
+     * @param string $sourceMime
+     * @param string $targetMime
+     * @param array<string,mixed> $options
+     *
+     * @return array<string,mixed>
+     */
+    private function runOptimizerChain($sourcePath, $destPath, $sourceMime, $targetMime, $options) {
+        $fallbackReason = 'no_optimizer_succeeded';
 
-        if (!$this->isWebpSupported()) {
-            $failureReason = 'webp_not_supported';
-        } else {
-            $editor = wp_get_image_editor($filePath);
-            if (is_wp_error($editor)) {
-                $failureReason = 'editor_init_error:' . $editor->get_error_code();
-            } else {
-                $setQualityResult = $editor->set_quality($quality);
-                if (is_wp_error($setQualityResult)) {
-                    $failureReason = 'quality_error:' . $setQualityResult->get_error_code();
-                    $qualityIsFatal = true;
-                } else {
-                    $saved = $editor->save($webpPath, self::MIME_WEBP);
-                    if (is_wp_error($saved)) {
-                        $failureReason = 'save_error:' . $saved->get_error_code();
-                    } else {
-                        $result = true;
-                    }
-                }
+        foreach ($this->optimizers as $optimizer) {
+            if (!$optimizer instanceof CICOptimizerInterface) {
+                continue;
             }
-        }
 
-        if ($qualityIsFatal) {
-            return null;
-        }
-
-        return $result;
-    }
-
-    private function getEffectiveWebpQuality($quality, $compressionType) {
-        if ('lossless' === $compressionType) {
-            return 100;
-        }
-
-        return (int) $quality;
-    }
-
-    private function saveAsWebpWithGd($filePath, $webpPath, $quality, &$failureReason) {
-        $isSuccessful = false;
-
-        if (function_exists('imagewebp')) {
-            $sourceImage = $this->createImageResourceFromFile($filePath);
-
-            if (!is_resource($sourceImage) && !is_object($sourceImage)) {
-                $failureReason = 'gd_open_error';
-            } else {
-                imagepalettetotruecolor($sourceImage);
-                imagealphablending($sourceImage, false);
-                imagesavealpha($sourceImage, true);
-
-                $isSuccessful = imagewebp($sourceImage, $webpPath, (int) $quality);
-                imagedestroy($sourceImage);
-
-                if (!$isSuccessful) {
-                    $failureReason = 'gd_save_error';
-                }
+            if (!$optimizer->supports($sourceMime)) {
+                continue;
             }
+
+            $providerOptions = array_merge(
+                $options,
+                array(
+                    'source_mime' => $sourceMime,
+                    'target_mime' => $targetMime,
+                )
+            );
+
+            $result = $optimizer->optimize($sourcePath, $destPath, $providerOptions);
+            $success = !empty($result['success']) && file_exists($destPath);
+            if ($success) {
+                return array(
+                    'success' => true,
+                    'engine' => $optimizer->getName() . (empty($result['engine']) ? '' : ':' . (string) $result['engine']),
+                    'reason' => 'ok',
+                );
+            }
+
+            $fallbackReason = isset($result['reason']) ? (string) $result['reason'] : 'provider_failed';
+
+            $this->logger->log('optimizer_fallback', array(
+                'provider' => $optimizer->getName(),
+                'source' => $sourcePath,
+                'dest' => $destPath,
+                'source_mime' => $sourceMime,
+                'target_mime' => $targetMime,
+                'reason' => $fallbackReason,
+            ));
         }
 
-        return $isSuccessful;
-    }
-
-    private function createImageResourceFromFile($filePath) {
-        $imageInfo = function_exists('getimagesize') ? @getimagesize($filePath) : null;
-        if (!is_array($imageInfo) || empty($imageInfo['mime'])) {
-            return null;
-        }
-
-        $mime = (string) $imageInfo['mime'];
-        $creatorFunction = $this->getImageCreatorFunctionByMime($mime);
-
-        if ('' === $creatorFunction || !function_exists($creatorFunction)) {
-            return null;
-        }
-
-        return @$creatorFunction($filePath);
-    }
-
-    private function getImageCreatorFunctionByMime($mime) {
-        $creators = array(
-            'image/jpeg' => 'imagecreatefromjpeg',
-            'image/png' => 'imagecreatefrompng',
-            'image/gif' => 'imagecreatefromgif',
-            'image/webp' => 'imagecreatefromwebp',
+        return array(
+            'success' => false,
+            'engine' => '',
+            'reason' => $fallbackReason,
         );
+    }
 
-        return isset($creators[$mime]) ? $creators[$mime] : '';
+    /**
+     * @param string $path
+     *
+     * @return string
+     */
+    private function detectRealMimeType($path) {
+        $mime = '';
+
+        if (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if (false !== $finfo) {
+                $detected = @finfo_file($finfo, $path);
+                if (is_string($detected)) {
+                    $mime = strtolower($detected);
+                }
+                @finfo_close($finfo);
+            }
+        }
+
+        if ('' === $mime && function_exists('getimagesize')) {
+            $imageInfo = @getimagesize($path);
+            if (is_array($imageInfo) && !empty($imageInfo['mime'])) {
+                $mime = strtolower((string) $imageInfo['mime']);
+            }
+        }
+
+        if ('image/jpg' === $mime) {
+            $mime = 'image/jpeg';
+        }
+
+        return $mime;
+    }
+
+    /**
+     * @param string $sourcePath
+     * @param string $targetMime
+     *
+     * @return string
+     */
+    private function createTempPath($sourcePath, $targetMime) {
+        $suffix = 'tmp';
+        if ('image/jpeg' === $targetMime) {
+            $suffix = 'jpg';
+        } elseif ('image/png' === $targetMime) {
+            $suffix = 'png';
+        } elseif ('image/webp' === $targetMime) {
+            $suffix = 'webp';
+        } elseif ('image/avif' === $targetMime) {
+            $suffix = 'avif';
+        }
+
+        return $sourcePath . '.cic-tmp.' . $suffix;
     }
 
     private function getResolvedUploadsBaseDir() {
@@ -288,12 +445,14 @@ final class CICFileConversionService {
         $uploadsBaseDir = isset($uploads['basedir']) ? (string) $uploads['basedir'] : '';
         if ('' === $uploadsBaseDir) {
             self::$uploadsBaseDirCache = '';
+
             return self::$uploadsBaseDirCache;
         }
 
         $resolvedBaseDir = realpath($uploadsBaseDir);
         if (false === $resolvedBaseDir) {
             self::$uploadsBaseDirCache = '';
+
             return self::$uploadsBaseDirCache;
         }
 
@@ -323,24 +482,5 @@ final class CICFileConversionService {
         }
 
         return $resolvedNormalizedPath;
-    }
-
-    private function hasReusableWebpFile($sourcePath, $webpPath) {
-        if ('' === $webpPath || !file_exists($webpPath)) {
-            return false;
-        }
-
-        if (filesize($webpPath) <= 0) {
-            return false;
-        }
-
-        $sourceModifiedAt = @filemtime($sourcePath);
-        $webpModifiedAt = @filemtime($webpPath);
-
-        if (false === $sourceModifiedAt || false === $webpModifiedAt) {
-            return false;
-        }
-
-        return $webpModifiedAt >= $sourceModifiedAt;
     }
 }
