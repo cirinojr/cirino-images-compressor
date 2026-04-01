@@ -101,12 +101,12 @@ final class CICAdminPage {
                 <header class="cic-header-card">
                     <div class="cic-header-main">
                         <div class="cic-brand-mark" aria-hidden="true">
-                            <img id="cic-brand-logo" src="<?php echo esc_url(CIC_PLUGIN_URL . 'assets/images/cic-logo.png'); ?>" alt="<?php echo esc_attr__('Cirino Images Compressor Logo', 'cirino-images-compressor'); ?>" />
+                            <img id="cic-brand-logo" src="<?php echo esc_url(CIC_PLUGIN_URL . 'assets/images/cic-logo.png'); ?>" alt="" />
                             <span class="cic-brand-fallback">CIC</span>
                         </div>
                         <div>
-                        <h1 class="cic-title"><?php echo esc_html__('Cirino Images Compressor', 'cirino-images-compressor'); ?></h1>
-                        <p class="cic-description"><?php echo esc_html__('Aggressive image optimization with safe fallback chain (Binary > Imagick > GD) and optional WebP/AVIF generation.', 'cirino-images-compressor'); ?></p>
+                            <h1 class="cic-title"><?php echo esc_html__('Cirino Images Compressor', 'cirino-images-compressor'); ?></h1>
+                            <p class="cic-description"><?php echo esc_html__('Aggressive image optimization with safe fallback chain (Binary > Imagick > GD) and optional WebP/AVIF generation.', 'cirino-images-compressor'); ?></p>
                         </div>
                     </div>
                     <div class="cic-head-meta">

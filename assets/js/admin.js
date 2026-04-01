@@ -22,6 +22,7 @@
   const applyRecommendedDefaultText = applyRecommendedButton.textContent;
   let applyRecommendedRestoreTimer = null;
   let toastTimer = null;
+  const pollInterval = Math.max(2000, Number(cicAdminConfig.pollInterval || 10000));
   const i18n = cicAdminConfig.i18n || {};
 
   const t = (key, fallback) => {
@@ -43,7 +44,7 @@
       method: 'POST',
       body: formData,
       credentials: 'same-origin'
-    }).then(async (response) => {
+    }).then((response) => {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -177,6 +178,10 @@
   };
 
   const refreshStatus = () => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      return;
+    }
+
     if (statusRequestInFlight) {
       return;
     }
@@ -327,5 +332,5 @@
 
   activateTab('config');
   refreshStatus();
-  globalThis.setInterval(refreshStatus, Number(cicAdminConfig.pollInterval || 10000));
+  globalThis.setInterval(refreshStatus, pollInterval);
 })();
