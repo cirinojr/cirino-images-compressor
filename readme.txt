@@ -8,7 +8,7 @@ Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Aggressive WordPress image optimization with fallback chain (Binary > Imagick > GD), transparency-safe PNG pipeline, and optional WebP/AVIF generation.
+WordPress image optimization with a fallback chain (local binaries > Imagick > GD), a transparency-safe PNG pipeline, and optional WebP/AVIF generation.
 
 == Description ==
 Cirino Images Compressor helps you optimize existing and newly uploaded media images with stronger compression while keeping Media Library compatibility.

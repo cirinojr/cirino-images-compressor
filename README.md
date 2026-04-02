@@ -1,88 +1,113 @@
 # Cirino Images Compressor
 
-WordPress plugin for image compression and optimization focused on visual quality, real size reduction, and a safe fallback chain across engines.
+WordPress plugin for practical image optimization in the Media Library, with a safe fallback chain and clear operational controls.
 
 ![Plugin banner](docs/images/banner.png)
 
-## ✨ Overview
+## Overview
 
-**Cirino Images Compressor** optimizes Media Library images with a format-specific pipeline, multiple compression levels, and a fallback architecture designed to work well on modest environments (Apache/Nginx, shared hosting, basic VPS) without breaking the default WordPress workflow.
+Cirino Images Compressor helps editors reduce image size without changing their normal WordPress workflow.
 
-## ✅ Key Features
+The plugin focuses on:
 
-- Optimization levels: `lossless`, `balanced`, `aggressive`, `ultra`
-- Format-specific pipeline:
-  - JPEG/JPG: re-encode + configurable quality + progressive mode + metadata stripping
-  - PNG: aggressive flow with priority for `pngquant` + `oxipng`, preserving transparency
-  - WebP: optional generation for original files and sub-sizes
-  - AVIF: optional when real support is available
-- Chained fallback:
-  1. Binários locais (`pngquant`, `oxipng`, `cwebp`, `avifenc`)
-  2. Imagick
-  3. GD / default WordPress encoder
-- Operational safety:
-  - validates real MIME type
-  - skips SVG files
-  - creates backup before overwrite
-  - keeps original when optimized output is larger
-  - generates WebP/AVIF via temporary files before replace to avoid clobbering existing alternatives on failure
-- Reliability guards:
-  - retry ceiling for hard-failing attachments so batches can complete instead of looping forever
-  - throttled admin fallback processing while status polling is active
-- Compatible with Media Library and WordPress-generated sizes
-- Modern admin interface with tabs and real-time status
+- Real file size reduction with configurable quality levels
+- Safe processing (backup-first behavior and keep-original-if-larger checks)
+- Broad compatibility through fallback engines when preferred tools are not available
 
-## 🧠 Native Hooks Used
+## Features
 
-- `wp_editor_set_quality`
-- `image_editor_output_format`
-- `wp_image_editors`
-- `wp_generate_attachment_metadata`
+### Optimization levels
 
-## 🖼️ Interface Screenshots
+- `lossless`
+- `balanced`
+- `aggressive`
+- `ultra`
 
-### Settings Screen
+### Format-aware pipeline
+
+- **JPEG/JPG**: re-encode with configurable quality, optional progressive output, optional metadata stripping
+- **PNG**: optimization flow that prioritizes `pngquant` + `oxipng` when available, with transparency preservation
+- **WebP**: optional generation for originals and WordPress sub-sizes
+- **AVIF**: optional generation only when server support is available
+
+### Fallback chain
+
+1. Local binaries (`pngquant`, `oxipng`, `cwebp`, `avifenc`)
+2. Imagick
+3. GD / default WordPress encoder
+
+### Safety and reliability
+
+- Real MIME-type validation
+- SVG skip protection
+- Backup before overwrite
+- Keep-original-if-larger rule
+- Temporary-file strategy for WebP/AVIF generation before final replace
+- Retry ceiling for repeatedly failing attachments
+- Throttled admin fallback processing while status polling is active
+
+### WordPress integration
+
+- Works with Media Library originals and generated sizes
+- Supports bulk processing with status reporting in `Tools > Images Compressor`
+- Uses native hooks:
+  - `wp_editor_set_quality`
+  - `image_editor_output_format`
+  - `wp_image_editors`
+  - `wp_generate_attachment_metadata`
+
+## Installation
+
+1. Copy the plugin folder to `wp-content/plugins/cirino-images-compressor`.
+2. Activate the plugin in the WordPress admin.
+3. Open `Tools > Images Compressor`.
+4. Choose optimization settings and start bulk optimization.
+
+## Usage
+
+1. Set batch size and optimization level.
+2. Configure JPEG/WebP/AVIF quality values as needed.
+3. Optionally enable WebP and AVIF generation.
+4. Start optimization and monitor progress in the Batch & Status tab.
+
+## Screenshots
+
+### Settings
 
 ![Settings screen](docs/images/screenshot-settings.png)
 
-### Batch and Status Screen
+### Batch and status
 
 ![Batch and status screen](docs/images/screenshot-batch.png)
 
-## 🏗️ Architecture (Summary)
+## Project structure
 
-- `includes/class-cic-capabilities-detector.php`: detects server capabilities
-- `includes/class-cic-optimizer-interface.php`: common provider contract
-- Providers:
-  - `class-cic-binary-optimizer-provider.php`
-  - `class-cic-imagick-optimizer-provider.php`
-  - `class-cic-gd-optimizer-provider.php`
-- `includes/class-cic-file-conversion-service.php`: orchestrates pipeline/fallback
-- `includes/class-cic-converter.php`: main batch and metadata workflow
-- `includes/class-cic-admin-page.php`: admin page
+- `includes/class-cic-capabilities-detector.php`: environment capability detection
+- `includes/class-cic-optimizer-interface.php`: optimizer provider contract
+- `includes/class-cic-binary-optimizer-provider.php`: local binary optimizer provider
+- `includes/class-cic-imagick-optimizer-provider.php`: Imagick optimizer provider
+- `includes/class-cic-gd-optimizer-provider.php`: GD optimizer provider
+- `includes/class-cic-file-conversion-service.php`: conversion and fallback orchestration
+- `includes/class-cic-converter.php`: batch workflow and attachment processing
+- `includes/class-cic-admin-page.php`: admin UI and controls
 
-## 🚀 Installation
+## Local development
 
-1. Copy the plugin folder to `wp-content/plugins/cirino-images-compressor`
-2. Activate it in the WordPress admin
-3. Go to `Tools > Images Compressor`
-4. Adjust settings and run bulk optimization
-
-## 🧪 Local Tests
+Run tests locally:
 
 ```bash
 composer install
 composer test
 ```
 
-## 📦 Expected Visual Assets in the Repository
+## Repository assets
 
-This README references the following files:
+This README references the following image files:
 
 - `docs/images/banner.png`
 - `docs/images/screenshot-settings.png`
 - `docs/images/screenshot-batch.png`
 
-## 📄 License
+## License
 
 GPLv2 or later.

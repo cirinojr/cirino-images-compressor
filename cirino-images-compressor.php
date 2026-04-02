@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Cirino Images Compressor
  * Plugin URI: https://github.com/cirinojr/cirino-images-compressor
- * Description: Convert and optimize WordPress media library images to WebP with batch processing and progress tracking.
+ * Description: Optimize WordPress Media Library images with configurable compression, fallback engines, and optional WebP/AVIF generation.
  * Version: 0.2.0
  * Author: Cirino
  * Author URI: https://github.com/cirinojr
