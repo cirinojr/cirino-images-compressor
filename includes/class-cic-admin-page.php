@@ -9,6 +9,8 @@ final class CICAdminPage {
     private const NONCE_FIELD = 'cic_nonce';
     private const NONCE_ACTION_SETTINGS = 'cic_admin_settings';
     private const NONCE_ACTION_AJAX = 'cic_admin_ajax';
+    private const FALLBACK_BATCH_TRANSIENT = 'cic_admin_fallback_batch_last_run';
+    private const FALLBACK_BATCH_MIN_INTERVAL = 15;
 
     /**
      * @var CICConverter
@@ -94,6 +96,8 @@ final class CICAdminPage {
 
         $settings = $this->converter->getSettings();
         $settingsSaved = isset($_GET['cic_settings']) && '1' === sanitize_text_field(wp_unslash($_GET['cic_settings']));
+        $logoFilePath = CIC_PLUGIN_DIR . 'assets/images/cic-logo.png';
+        $hasLogo = file_exists($logoFilePath);
 
         ?>
         <div class="wrap cic-wrap">
@@ -101,7 +105,9 @@ final class CICAdminPage {
                 <header class="cic-header-card">
                     <div class="cic-header-main">
                         <div class="cic-brand-mark" aria-hidden="true">
-                            <img id="cic-brand-logo" src="<?php echo esc_url(CIC_PLUGIN_URL . 'assets/images/cic-logo.png'); ?>" alt="" />
+                            <?php if ($hasLogo) : ?>
+                                <img id="cic-brand-logo" src="<?php echo esc_url(CIC_PLUGIN_URL . 'assets/images/cic-logo.png'); ?>" alt="" />
+                            <?php endif; ?>
                             <span class="cic-brand-fallback">CIC</span>
                         </div>
                         <div>
@@ -256,7 +262,7 @@ final class CICAdminPage {
     public function handleStart() {
         $this->assertRequestIsValid();
         $this->converter->start();
-        $this->runBatchFallback();
+        $this->runBatchFallback(true);
         wp_send_json_success($this->converter->getStatus());
     }
 
@@ -312,12 +318,29 @@ final class CICAdminPage {
         exit;
     }
 
-    private function runBatchFallback() {
+    private function runBatchFallback($force = false) {
         if (!$this->converter->isRunning()) {
             return;
         }
 
+        if (!$force && !$this->shouldRunFallbackBatchNow()) {
+            return;
+        }
+
         $this->converter->processBatch();
+    }
+
+    private function shouldRunFallbackBatchNow() {
+        $now = time();
+        $lastRun = (int) get_transient(self::FALLBACK_BATCH_TRANSIENT);
+
+        if ($lastRun > 0 && ($now - $lastRun) < self::FALLBACK_BATCH_MIN_INTERVAL) {
+            return false;
+        }
+
+        set_transient(self::FALLBACK_BATCH_TRANSIENT, $now, MINUTE_IN_SECONDS);
+
+        return true;
     }
 
     private function assertRequestIsValid() {
@@ -333,6 +356,9 @@ final class CICAdminPage {
             wp_send_json_error(array('message' => __('Unauthorized request.', 'cirino-images-compressor')), 403);
         }
 
-        check_ajax_referer(self::NONCE_ACTION_AJAX, 'nonce');
+        $nonceValid = check_ajax_referer(self::NONCE_ACTION_AJAX, 'nonce', false);
+        if (false === $nonceValid) {
+            wp_send_json_error(array('message' => __('Invalid security token.', 'cirino-images-compressor')), 403);
+        }
     }
 }

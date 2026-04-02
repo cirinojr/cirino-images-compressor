@@ -26,9 +26,12 @@ Features:
 - Optional AVIF generation only when real support exists.
 - Real mime-type validation and SVG skip protection.
 - Safe overwrite: backup-first strategy and keep-original-if-larger rule.
+- Safer alternative generation: writes WebP/AVIF to temp files and only replaces final file on success.
+- Retry ceiling for repeatedly failing attachments so batches can complete without infinite loops.
 - Records the engine used for each optimized attachment.
 - Converts newly uploaded images automatically.
 - Batch optimization over WP-Cron with admin fallback execution while the tools screen is open.
+- Admin fallback batch execution is throttled to reduce load during frequent status polling.
 - Conversion lock to reduce concurrent processing race conditions.
 - Live dashboard with monthly and global progress.
 - Batch benchmark metrics (time per batch, average ms/image, recommended batch size).

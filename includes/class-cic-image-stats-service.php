@@ -14,20 +14,36 @@ final class CICImageStatsService {
         $this->fileConversionService = $fileConversionService;
     }
 
-    public function countPendingImages($convertedMetaKey) {
+    public function countPendingImages($convertedMetaKey, $attemptsMetaKey, $maxAttempts) {
         $query = new WP_Query(
             $this->buildImageCountQueryArgs(
                 array(
                     'meta_query' => array(
-                        'relation' => 'OR',
+                        'relation' => 'AND',
                         array(
-                            'key' => $convertedMetaKey,
-                            'compare' => 'NOT EXISTS',
+                            'relation' => 'OR',
+                            array(
+                                'key' => $convertedMetaKey,
+                                'compare' => 'NOT EXISTS',
+                            ),
+                            array(
+                                'key' => $convertedMetaKey,
+                                'value' => '1',
+                                'compare' => '!=',
+                            ),
                         ),
                         array(
-                            'key' => $convertedMetaKey,
-                            'value' => '1',
-                            'compare' => '!=',
+                            'relation' => 'OR',
+                            array(
+                                'key' => $attemptsMetaKey,
+                                'compare' => 'NOT EXISTS',
+                            ),
+                            array(
+                                'key' => $attemptsMetaKey,
+                                'value' => (int) $maxAttempts,
+                                'type' => 'NUMERIC',
+                                'compare' => '<',
+                            ),
                         ),
                     ),
                 )
@@ -57,15 +73,34 @@ final class CICImageStatsService {
         update_option($optionKey, $current);
     }
 
-    public function buildStatus($isRunning, $convertedMetaKey, $monthOptionPrefix, $statusCacheKey, $statusCacheTtl) {
+    public function buildStatus($isRunning, $convertedMetaKey, $attemptsMetaKey, $maxAttempts, $monthOptionPrefix, $statusCacheKey, $statusCacheTtl) {
         $counts = get_transient($statusCacheKey);
         if (!is_array($counts)) {
+            $totalImages = $this->countAllImages();
+            $totalConverted = 0;
+            $pending = 0;
+            $monthTotal = 0;
+            $monthConverted = 0;
+
+            if ($totalImages > 0) {
+                $totalConverted = $this->countConvertedImages($convertedMetaKey);
+
+                if ($totalConverted < $totalImages) {
+                    $pending = $this->countPendingImages($convertedMetaKey, $attemptsMetaKey, $maxAttempts);
+                }
+
+                $monthTotal = $this->countImagesByMonth(false, $convertedMetaKey);
+                if ($monthTotal > 0) {
+                    $monthConverted = $this->countImagesByMonth(true, $convertedMetaKey);
+                }
+            }
+
             $counts = array(
-                'month_total' => $this->countImagesByMonth(false, $convertedMetaKey),
-                'month_converted' => $this->countImagesByMonth(true, $convertedMetaKey),
-                'total_images' => $this->countAllImages(),
-                'total_converted' => $this->countConvertedImages($convertedMetaKey),
-                'pending' => $this->countPendingImages($convertedMetaKey),
+                'month_total' => $monthTotal,
+                'month_converted' => $monthConverted,
+                'total_images' => $totalImages,
+                'total_converted' => $totalConverted,
+                'pending' => $pending,
             );
 
             set_transient($statusCacheKey, $counts, $statusCacheTtl);
@@ -160,7 +195,7 @@ final class CICImageStatsService {
             array(
                 'post_type' => 'attachment',
                 'post_status' => 'inherit',
-                'post_mime_type' => 'image',
+                'post_mime_type' => $this->fileConversionService->getSupportedMimeTypes(),
                 'posts_per_page' => 1,
                 'fields' => 'ids',
                 'no_found_rows' => false,

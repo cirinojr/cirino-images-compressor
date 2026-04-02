@@ -6,12 +6,13 @@ if (!defined('ABSPATH')) {
 
 final class CICConverter {
     private const STATUS_CACHE_KEY = 'cic_status_counts';
-    private const STATUS_CACHE_TTL = 10;
+    private const DEFAULT_STATUS_CACHE_TTL = 30;
 
     public const META_CONVERTED = '_cic_optimized';
     public const META_CONVERTED_AT = '_cic_optimized_at';
     public const META_FAILED = '_cic_optimization_failed';
     public const META_LAST_ENGINE = '_cic_optimization_engine';
+    public const META_ATTEMPTS = '_cic_optimization_attempts';
 
     public const OPTION_RUNNING = 'cic_is_running';
     public const OPTION_BATCH_SIZE = 'cic_batch_size';
@@ -55,6 +56,7 @@ final class CICConverter {
 
     private const MAX_BATCH_SIZE = 200;
     private const BATCH_LOCK_TTL = 300;
+    private const MAX_OPTIMIZATION_ATTEMPTS = 3;
 
     /**
      * @var CICFileConversionService
@@ -155,7 +157,7 @@ final class CICConverter {
                 'processed' => 0,
                 'converted' => 0,
                 'failed' => 0,
-                'remaining' => $this->imageStatsService->countPendingImages(self::META_CONVERTED),
+                'remaining' => $this->imageStatsService->countPendingImages(self::META_CONVERTED, self::META_ATTEMPTS, self::MAX_OPTIMIZATION_ATTEMPTS),
             );
         }
 
@@ -164,7 +166,7 @@ final class CICConverter {
                 'processed' => 0,
                 'converted' => 0,
                 'failed' => 0,
-                'remaining' => $this->imageStatsService->countPendingImages(self::META_CONVERTED),
+                'remaining' => $this->imageStatsService->countPendingImages(self::META_CONVERTED, self::META_ATTEMPTS, self::MAX_OPTIMIZATION_ATTEMPTS),
             );
         }
 
@@ -176,7 +178,7 @@ final class CICConverter {
                 array(
                     'post_type' => 'attachment',
                     'post_status' => 'inherit',
-                    'post_mime_type' => 'image',
+                    'post_mime_type' => $this->fileConversionService->getSupportedMimeTypes(),
                     'posts_per_page' => $batchSize,
                     'fields' => 'ids',
                     'orderby' => 'ID',
@@ -187,15 +189,31 @@ final class CICConverter {
                     'update_post_term_cache' => false,
                     'lazy_load_term_meta' => false,
                     'meta_query' => array(
-                        'relation' => 'OR',
+                        'relation' => 'AND',
                         array(
-                            'key' => self::META_CONVERTED,
-                            'compare' => 'NOT EXISTS',
+                            'relation' => 'OR',
+                            array(
+                                'key' => self::META_CONVERTED,
+                                'compare' => 'NOT EXISTS',
+                            ),
+                            array(
+                                'key' => self::META_CONVERTED,
+                                'value' => '1',
+                                'compare' => '!=',
+                            ),
                         ),
                         array(
-                            'key' => self::META_CONVERTED,
-                            'value' => '1',
-                            'compare' => '!=',
+                            'relation' => 'OR',
+                            array(
+                                'key' => self::META_ATTEMPTS,
+                                'compare' => 'NOT EXISTS',
+                            ),
+                            array(
+                                'key' => self::META_ATTEMPTS,
+                                'value' => self::MAX_OPTIMIZATION_ATTEMPTS,
+                                'type' => 'NUMERIC',
+                                'compare' => '<',
+                            ),
                         ),
                     ),
                 )
@@ -220,7 +238,7 @@ final class CICConverter {
                 $this->updatePerformanceStats($processed, $converted, $failed, $durationMs, $batchSize);
             }
 
-            $remaining = $this->imageStatsService->countPendingImages(self::META_CONVERTED);
+            $remaining = $this->imageStatsService->countPendingImages(self::META_CONVERTED, self::META_ATTEMPTS, self::MAX_OPTIMIZATION_ATTEMPTS);
             if (0 === $remaining) {
                 update_option(self::OPTION_RUNNING, 0);
             }
@@ -247,6 +265,9 @@ final class CICConverter {
      * @return bool
      */
     public function processAttachment($attachmentId, $attachmentMetadata = null, $optimizationOptions = null, $clearStatusCacheOnSuccess = true) {
+        $attempts = (int) get_post_meta($attachmentId, self::META_ATTEMPTS, true);
+        update_post_meta($attachmentId, self::META_ATTEMPTS, $attempts + 1);
+
         $filePath = '';
         $validationError = $this->validateAttachmentForConversion((int) $attachmentId, $filePath);
         if ('' !== $validationError) {
@@ -275,6 +296,7 @@ final class CICConverter {
             }
 
             delete_post_meta($attachmentId, self::META_FAILED);
+            delete_post_meta($attachmentId, self::META_ATTEMPTS);
 
             $this->logger->log('attachment_optimized', array(
                 'attachment_id' => (int) $attachmentId,
@@ -309,15 +331,23 @@ final class CICConverter {
         $status = $this->imageStatsService->buildStatus(
             $this->isRunning(),
             self::META_CONVERTED,
+            self::META_ATTEMPTS,
+            self::MAX_OPTIMIZATION_ATTEMPTS,
             self::OPTION_MONTH_PREFIX,
             self::STATUS_CACHE_KEY,
-            self::STATUS_CACHE_TTL
+            $this->getStatusCacheTtl()
         );
 
         $status['performance'] = $this->getPerformanceStatus();
         $status['capabilities'] = $this->fileConversionService->getCapabilities();
 
         return $status;
+    }
+
+    private function getStatusCacheTtl() {
+        $ttl = apply_filters('cic_status_cache_ttl', self::DEFAULT_STATUS_CACHE_TTL);
+
+        return max(5, (int) $ttl);
     }
 
     public function applyRecommendedBatchSize() {
@@ -364,8 +394,8 @@ final class CICConverter {
         }
 
         $mime = (string) get_post_mime_type($attachmentId);
-        if (0 !== strpos($mime, 'image/') || 'image/svg+xml' === strtolower($mime)) {
-            return 'invalid_mime';
+        if (!$this->fileConversionService->isMimeTypeSupportedForOptimization($mime)) {
+            return 'unsupported_mime';
         }
 
         return '';

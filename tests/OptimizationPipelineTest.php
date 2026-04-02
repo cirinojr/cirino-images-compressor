@@ -113,4 +113,79 @@ final class OptimizationPipelineTest extends TestCase {
 
         $this->assertFileExists($this->uploadsDir . DIRECTORY_SEPARATOR . 'to-webp.webp');
     }
+
+    public function testFailedAlternativeGenerationPreservesExistingDestination(): void {
+        $source = $this->uploadsDir . DIRECTORY_SEPARATOR . 'existing-webp-source.png';
+        $dest = $this->uploadsDir . DIRECTORY_SEPARATOR . 'existing-webp-source.webp';
+
+        file_put_contents($source, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGUlEQVQImWNgoBpgYGBoYGBg+M+ABBgAAN2kA0QvC4GAAAAAElFTkSuQmCC'));
+        file_put_contents($dest, 'existing_webp_payload');
+
+        $optimizer = new CICFakeOptimizer('webp-fail', function ($sourcePath, $destPath, $options) {
+            if ('image/webp' === $options['target_mime']) {
+                return array('success' => false, 'engine' => 'fail-webp', 'reason' => 'forced_failure');
+            }
+
+            copy($sourcePath, $destPath);
+            return array('success' => true, 'engine' => 'copy');
+        });
+
+        $service = new CICFileConversionService(new CICCapabilitiesDetector(), new CICDebugLogger(), array($optimizer));
+        $service->generateAlternativeFormats($source, array('convert_to_webp' => 1, 'try_avif' => 0));
+
+        $this->assertFileExists($dest);
+        $this->assertSame('existing_webp_payload', file_get_contents($dest));
+    }
+
+    public function testLargerAlternativeGenerationDoesNotReplaceExistingDestination(): void {
+        $source = $this->uploadsDir . DIRECTORY_SEPARATOR . 'larger-webp-source.png';
+        $dest = $this->uploadsDir . DIRECTORY_SEPARATOR . 'larger-webp-source.webp';
+
+        file_put_contents($source, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGUlEQVQImWNgoBpgYGBoYGBg+M+ABBgAAN2kA0QvC4GAAAAAElFTkSuQmCC'));
+        file_put_contents($dest, 'existing_small_webp');
+
+        $optimizer = new CICFakeOptimizer('webp-larger', function ($sourcePath, $destPath, $options) {
+            if ('image/webp' === $options['target_mime']) {
+                file_put_contents($destPath, str_repeat('w', 240));
+                return array('success' => true, 'engine' => 'larger-webp');
+            }
+
+            copy($sourcePath, $destPath);
+            return array('success' => true, 'engine' => 'copy');
+        });
+
+        $service = new CICFileConversionService(new CICCapabilitiesDetector(), new CICDebugLogger(), array($optimizer));
+        $service->generateAlternativeFormats($source, array('convert_to_webp' => 1, 'try_avif' => 0));
+
+        $this->assertFileExists($dest);
+        $this->assertSame('existing_small_webp', file_get_contents($dest));
+    }
+
+    public function testOptimizeFileRejectsPathOutsideUploads(): void {
+        $outsidePath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cic-outside-test.jpg';
+        file_put_contents($outsidePath, str_repeat('x', 64));
+
+        $service = new CICFileConversionService(new CICCapabilitiesDetector(), new CICDebugLogger(), array());
+        $result = $service->optimizeFile($outsidePath, array('preserve_original' => 0));
+
+        $this->assertFalse($result['success']);
+        $this->assertSame('invalid_file_path', $result['reason']);
+
+        @unlink($outsidePath);
+    }
+
+    public function testSupportedMimeTypesIncludeOnlyProcessableImageFormats(): void {
+        $service = new CICFileConversionService(new CICCapabilitiesDetector(), new CICDebugLogger(), array());
+        $supported = $service->getSupportedMimeTypes();
+
+        $this->assertSame(array('image/jpeg', 'image/png', 'image/webp', 'image/avif'), $supported);
+    }
+
+    public function testUnsupportedImageMimeIsRejectedBySupportGuard(): void {
+        $service = new CICFileConversionService(new CICCapabilitiesDetector(), new CICDebugLogger(), array());
+
+        $this->assertTrue($service->isMimeTypeSupportedForOptimization('image/jpeg'));
+        $this->assertFalse($service->isMimeTypeSupportedForOptimization('image/gif'));
+        $this->assertFalse($service->isMimeTypeSupportedForOptimization('image/svg+xml'));
+    }
 }

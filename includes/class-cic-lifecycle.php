@@ -93,6 +93,7 @@ final class CICLifecycle {
         delete_metadata('post', 0, CICConverter::META_CONVERTED_AT, '', true);
         delete_metadata('post', 0, CICConverter::META_FAILED, '', true);
         delete_metadata('post', 0, CICConverter::META_LAST_ENGINE, '', true);
+        delete_metadata('post', 0, CICConverter::META_ATTEMPTS, '', true);
     }
 
     public static function registerCronSchedules($schedules) {

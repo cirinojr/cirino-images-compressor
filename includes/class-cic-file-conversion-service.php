@@ -245,6 +245,24 @@ final class CICFileConversionService {
     }
 
     /**
+     * @return array<int,string>
+     */
+    public function getSupportedMimeTypes() {
+        return self::ALLOWED_MIMES;
+    }
+
+    /**
+     * @param string $mimeType
+     *
+     * @return bool
+     */
+    public function isMimeTypeSupportedForOptimization($mimeType) {
+        $mime = strtolower(trim((string) $mimeType));
+
+        return in_array($mime, self::ALLOWED_MIMES, true);
+    }
+
+    /**
      * @param int $attachmentId
      * @param string $originalFilePath
      * @param array<string,mixed>|null $attachmentMetadata
@@ -299,22 +317,31 @@ final class CICFileConversionService {
             return;
         }
 
+        $tempDestPath = $destPath . '.cic-alt-tmp-' . uniqid('', true);
+
         $sourceMime = $this->detectRealMimeType($sourcePath);
-        $result = $this->runOptimizerChain($sourcePath, $destPath, $sourceMime, $targetMime, $options);
-        if (empty($result['success']) || !file_exists($destPath)) {
-            if (file_exists($destPath)) {
-                @unlink($destPath);
+        $result = $this->runOptimizerChain($sourcePath, $tempDestPath, $sourceMime, $targetMime, $options);
+        if (empty($result['success']) || !file_exists($tempDestPath)) {
+            if (file_exists($tempDestPath)) {
+                @unlink($tempDestPath);
             }
             return;
         }
 
         $sourceSize = (int) @filesize($sourcePath);
-        $generatedSize = (int) @filesize($destPath);
+        $generatedSize = (int) @filesize($tempDestPath);
 
         if ($generatedSize <= 0 || $generatedSize >= $sourceSize) {
-            @unlink($destPath);
+            @unlink($tempDestPath);
             return;
         }
+
+        if (!@copy($tempDestPath, $destPath)) {
+            @unlink($tempDestPath);
+            return;
+        }
+
+        @unlink($tempDestPath);
 
         $this->logger->log('generated_alternative_format', array(
             'source' => $sourcePath,

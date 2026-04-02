@@ -25,6 +25,10 @@ WordPress plugin for image compression and optimization focused on visual qualit
   - skips SVG files
   - creates backup before overwrite
   - keeps original when optimized output is larger
+  - generates WebP/AVIF via temporary files before replace to avoid clobbering existing alternatives on failure
+- Reliability guards:
+  - retry ceiling for hard-failing attachments so batches can complete instead of looping forever
+  - throttled admin fallback processing while status polling is active
 - Compatible with Media Library and WordPress-generated sizes
 - Modern admin interface with tabs and real-time status
 
