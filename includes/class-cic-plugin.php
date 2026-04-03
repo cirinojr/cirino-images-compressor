@@ -47,7 +47,7 @@ final class CICPlugin {
      * @return void
      */
     public function run() {
-        add_action('plugins_loaded', array($this, 'loadTextdomain'));
+        add_action('init', array($this, 'loadTextdomain'));
         add_filter('cron_schedules', array($this, 'registerCronSchedules'));
         add_action(self::CRON_HOOK, array($this, 'processCronBatch'));
         add_filter('wp_editor_set_quality', array($this, 'filterEditorQuality'), 10, 2);

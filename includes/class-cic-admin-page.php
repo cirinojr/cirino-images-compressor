@@ -76,11 +76,13 @@ final class CICAdminPage {
                     'applying' => __('Applying...', 'cirino-images-compressor'),
                     'applied' => __('Applied', 'cirino-images-compressor'),
                     'applyFailed' => __('Apply failed', 'cirino-images-compressor'),
+                    /* translators: %d: applied batch size value. */
                     'appliedWithValue' => __('Applied: %d', 'cirino-images-compressor'),
                     'startSuccess' => __('Optimization started successfully.', 'cirino-images-compressor'),
                     'startError' => __('Could not start optimization.', 'cirino-images-compressor'),
                     'stopSuccess' => __('Optimization stopped.', 'cirino-images-compressor'),
                     'stopError' => __('Could not stop optimization.', 'cirino-images-compressor'),
+                    /* translators: %d: recommended batch size value. */
                     'applySuccessWithValue' => __('Recommended batch applied: %d.', 'cirino-images-compressor'),
                     'applySuccess' => __('Recommended batch applied.', 'cirino-images-compressor'),
                     'applyError' => __('Could not apply recommended batch.', 'cirino-images-compressor'),

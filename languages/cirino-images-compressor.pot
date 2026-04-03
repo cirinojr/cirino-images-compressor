@@ -1,0 +1,256 @@
+﻿msgid ""
+msgstr ""
+"Project-Id-Version: Cirino Images Compressor\n"
+"Report-Msgid-Bugs-To: https://github.com/cirinojr/cirino-images-compressor/issues\n"
+"POT-Creation-Date: 2026-04-03 13:15:40-03:00\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: cirino-images-compressor\n"
+
+msgid "Aggressive"
+msgstr ""
+
+msgid "Aggressive and Ultra target stronger size reduction while preserving visual quality."
+msgstr ""
+
+msgid "Aggressive image optimization with safe fallback chain (Binary > Imagick > GD) and optional WebP/AVIF generation."
+msgstr ""
+
+msgid "Applied"
+msgstr ""
+
+msgid "Applied: %d"
+msgstr ""
+
+msgid "Apply failed"
+msgstr ""
+
+msgid "Apply recommended batch"
+msgstr ""
+
+msgid "Applying..."
+msgstr ""
+
+msgid "Available"
+msgstr ""
+
+msgid "avg"
+msgstr ""
+
+msgid "AVIF quality"
+msgstr ""
+
+msgid "Balanced"
+msgstr ""
+
+msgid "Batch & Status"
+msgstr ""
+
+msgid "Batch performance benchmark"
+msgstr ""
+
+msgid "Batch size"
+msgstr ""
+
+msgid "Bulk Actions"
+msgstr ""
+
+msgid "Capabilities"
+msgstr ""
+
+msgid "Cirino Images Compressor"
+msgstr ""
+
+msgid "Configure quality, output formats, safety and processing behavior."
+msgstr ""
+
+msgid "Convert to WebP"
+msgstr ""
+
+msgid "converted"
+msgstr ""
+
+msgid "Could not apply recommended batch."
+msgstr ""
+
+msgid "Could not start optimization."
+msgstr ""
+
+msgid "Could not stop optimization."
+msgstr ""
+
+msgid "Current month progress"
+msgstr ""
+
+msgid "Debug logs"
+msgstr ""
+
+msgid "Enable image_editor_output_format mapping to WebP"
+msgstr ""
+
+msgid "Every 5 minutes"
+msgstr ""
+
+msgid "failed"
+msgstr ""
+
+msgid "Force WebP output in editor hook"
+msgstr ""
+
+msgid "Generate AVIF only when server supports it"
+msgstr ""
+
+msgid "Generate WebP alternatives for original and sub-sizes"
+msgstr ""
+
+msgid "How many images are processed per batch run (1 to 200)."
+msgstr ""
+
+msgid "Images Compressor"
+msgstr ""
+
+msgid "imgs"
+msgstr ""
+
+msgid "Invalid request context."
+msgstr ""
+
+msgid "Invalid request method."
+msgstr ""
+
+msgid "Invalid security token."
+msgstr ""
+
+msgid "JPEG quality"
+msgstr ""
+
+msgid "Keep .cic-bak backup after successful optimization"
+msgstr ""
+
+msgid "last"
+msgstr ""
+
+msgid "Last monthly batch summary"
+msgstr ""
+
+msgid "Lossless"
+msgstr ""
+
+msgid "ms/img"
+msgstr ""
+
+msgid "Optimization level"
+msgstr ""
+
+msgid "Optimization Settings"
+msgstr ""
+
+msgid "Optimization started successfully."
+msgstr ""
+
+msgid "Optimization stopped."
+msgstr ""
+
+msgid "Pending images"
+msgstr ""
+
+msgid "PNGQuant max quality"
+msgstr ""
+
+msgid "PNGQuant min quality"
+msgstr ""
+
+msgid "Preserve original backup"
+msgstr ""
+
+msgid "Process status"
+msgstr ""
+
+msgid "processed"
+msgstr ""
+
+msgid "recommended batch"
+msgstr ""
+
+msgid "Recommended batch applied."
+msgstr ""
+
+msgid "Recommended batch applied: %d."
+msgstr ""
+
+msgid "Remove metadata"
+msgstr ""
+
+msgid "Running"
+msgstr ""
+
+msgid "runs"
+msgstr ""
+
+msgid "Save settings"
+msgstr ""
+
+msgid "Sections"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Settings saved."
+msgstr ""
+
+msgid "Start optimization"
+msgstr ""
+
+msgid "Status & Results"
+msgstr ""
+
+msgid "Status error"
+msgstr ""
+
+msgid "Status update failed. Please try again."
+msgstr ""
+
+msgid "Stop optimization"
+msgstr ""
+
+msgid "Stopped"
+msgstr ""
+
+msgid "Strip EXIF/metadata when possible"
+msgstr ""
+
+msgid "Total image attachments"
+msgstr ""
+
+msgid "Total progress"
+msgstr ""
+
+msgid "Try AVIF"
+msgstr ""
+
+msgid "Ultra"
+msgstr ""
+
+msgid "Unauthorized request."
+msgstr ""
+
+msgid "Unavailable"
+msgstr ""
+
+msgid "updated at"
+msgstr ""
+
+msgid "Use these controls to run, stop and tune mass optimization without leaving this screen."
+msgstr ""
+
+msgid "WebP quality"
+msgstr ""
+
+msgid "WebP support"
+msgstr ""
+
+msgid "Write debug info to PHP error_log"
+msgstr ""
+

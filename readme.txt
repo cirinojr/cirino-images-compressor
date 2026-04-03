@@ -8,12 +8,10 @@ Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-WordPress image optimization with a fallback chain (local binaries > Imagick > GD), a transparency-safe PNG pipeline, and optional WebP/AVIF generation.
+Optimize WordPress Media Library images with a fallback chain (local binaries > Imagick > GD), a transparency-safe PNG pipeline, and optional WebP/AVIF generation.
 
 == Description ==
-Cirino Images Compressor helps you optimize existing and newly uploaded media images with stronger compression while keeping Media Library compatibility.
-
-Built for WordPress sites that need faster image delivery without losing operational control.
+Cirino Images Compressor helps you optimize existing and newly uploaded Media Library images with configurable compression settings and safe fallbacks.
 
 Features:
 - Pipeline by format (JPEG, PNG, WebP, AVIF optional) with fallback chain:
@@ -77,10 +75,6 @@ Yes. It uses WP-Cron and also processes fallback batches while the plugin admin 
 1. Main Tools screen with actions and conversion status.
 2. Settings section with batch size, quality, and conversion controls.
 3. Live benchmark and recommended batch size panel.
-
-== Upgrade Notice ==
-= 0.2.0 =
-Introduces aggressive/ultra optimization pipeline, format-aware fallback chain, and WordPress native hook integration.
 
 == Changelog ==
 = 0.2.0 =

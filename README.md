@@ -100,6 +100,12 @@ composer install
 composer test
 ```
 
+## WordPress.org release package
+
+This repository includes development resources (`tests/`, `vendor/`, docs, and Composer files) that are useful for GitHub workflows.
+
+For WordPress.org releases, use `.distignore` to exclude development-only files from the final plugin package.
+
 ## Repository assets
 
 This README references the following image files:
